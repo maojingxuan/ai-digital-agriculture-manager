@@ -1,0 +1,40 @@
+{
+  "name": "ai-digital-agriculture-manager",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI数字农业管家系统 MVP",
+  "engines": {
+    "node": ">=20.19 <25",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "setup:yolo": "node scripts/setup-yolo.mjs",
+    "auth:init": "node scripts/init-auth.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "dev": "npm run build -w packages/shared && concurrently -n api,web -c cyan,green \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
+    "build": "npm run build -w packages/shared && npm run build -w apps/api && npm run build -w apps/web",
+    "typecheck": "npm run build -w packages/shared && npm run typecheck -w apps/api && npm run typecheck -w apps/web",
+    "lint": "npm run lint -w apps/web",
+    "db:generate": "npm run db:generate -w apps/api",
+    "db:migrate": "npm run db:migrate -w apps/api",
+    "db:seed": "npm run db:seed -w apps/api",
+    "db:seed:reset": "npm run db:seed:reset -w apps/api",
+    "test:models": "npm run test:models -w apps/api",
+    "test:knowledge": "npm run test:knowledge -w apps/api",
+    "test:agent": "npm run test:agent -w apps/api",
+    "test:persistence": "npm run test:persistence -w apps/api",
+    "test:auth": "npm run test:auth -w apps/api",
+    "test:patrol-demo": "npm run build -w packages/shared && npm run build -w apps/api && node scripts/stage2-test.mjs",
+    "format": "prettier --write ."
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2"
+  }
+}

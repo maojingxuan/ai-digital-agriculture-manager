@@ -1,0 +1,397 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id                 String              @id @default(cuid())
+  name               String
+  phone              String?             @unique
+  email              String?             @unique
+  passwordHash       String?             @map("password_hash")
+  role               String              @default("user")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  greenhouses        Greenhouse[]
+  diseaseDiagnoses   DiseaseDiagnosis[]
+  patrolRecords      PatrolRecord[]
+  warnings           Warning[]
+  products           Product[]
+  deviceCommands     DeviceCommand[]
+  agentConversations AgentConversation[]
+  agentActionLogs    AgentActionLog[]
+  patrolDemoRuns     PatrolDemoRun[]
+
+  @@index([role])
+  @@map("users")
+}
+
+model Greenhouse {
+  id            String         @id @default(cuid())
+  name          String
+  location      String?
+  area          Float?
+  ownerId       String         @map("owner_id")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  owner         User           @relation(fields: [ownerId], references: [id])
+  sensors       Sensor[]
+  sensorData    SensorData[]
+  crops         Crop[]
+  patrolRecords PatrolRecord[]
+  warnings      Warning[]
+  devices       Device[]
+
+  @@index([ownerId])
+  @@index([name])
+  @@map("greenhouses")
+}
+
+model Sensor {
+  id           String     @id @default(cuid())
+  greenhouseId String     @map("greenhouse_id")
+  name         String
+  sensorType   String     @map("sensor_type")
+  unit         String
+  status       String     @default("online")
+  installedAt  DateTime?  @map("installed_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+
+  @@index([greenhouseId])
+  @@index([sensorType])
+  @@index([greenhouseId, sensorType])
+  @@map("sensors")
+}
+
+model SensorData {
+  id           String     @id @default(cuid())
+  greenhouseId String     @map("greenhouse_id")
+  sensorType   String     @map("sensor_type")
+  value        Float
+  unit         String
+  timestamp    DateTime
+  createdAt    DateTime   @default(now()) @map("created_at")
+  greenhouse   Greenhouse @relation(fields: [greenhouseId], references: [id])
+
+  @@index([greenhouseId])
+  @@index([sensorType])
+  @@index([timestamp])
+  @@index([greenhouseId, sensorType, timestamp])
+  @@map("sensor_data")
+}
+
+model Crop {
+  id                String             @id @default(cuid())
+  greenhouseId      String             @map("greenhouse_id")
+  name              String
+  variety           String?
+  growthStage       String?            @map("growth_stage")
+  plantedAt         DateTime?          @map("planted_at")
+  expectedHarvestAt DateTime?          @map("expected_harvest_at")
+  status            String             @default("growing")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  greenhouse        Greenhouse         @relation(fields: [greenhouseId], references: [id])
+  diseaseDiagnoses  DiseaseDiagnosis[]
+  patrolRecords     PatrolRecord[]
+  products          Product[]
+
+  @@index([greenhouseId])
+  @@index([name])
+  @@index([status])
+  @@map("crops")
+}
+
+model DiseaseDiagnosis {
+  id                 String           @id @default(cuid())
+  userId             String           @map("user_id")
+  cropId             String?          @map("crop_id")
+  cropType           String           @map("crop_type")
+  imageUrl           String?          @map("image_url")
+  annotatedImageUrl  String?          @map("annotated_image_url")
+  symptomDescription String?          @map("symptom_description")
+  suspectedDisease   String           @map("suspected_disease")
+  confidence         Float
+  riskLevel          String           @map("risk_level")
+  analysis           String
+  suggestion         String
+  modelName          String?          @map("model_name")
+  detections         Json?
+  ragReferences      Json?            @map("rag_references")
+  visionError        String?          @map("vision_error")
+  reviewRequired     Boolean          @default(false) @map("review_required")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  user               User             @relation(fields: [userId], references: [id])
+  crop               Crop?            @relation(fields: [cropId], references: [id])
+  warnings           Warning[]
+  agentActionLogs    AgentActionLog[]
+
+  @@index([userId])
+  @@index([cropId])
+  @@index([riskLevel])
+  @@index([createdAt])
+  @@map("disease_diagnoses")
+}
+
+model PatrolRecord {
+  id              String           @id @default(cuid())
+  userId          String           @map("user_id")
+  greenhouseId    String           @map("greenhouse_id")
+  cropId          String?          @map("crop_id")
+  plotName        String           @map("plot_name")
+  cropName        String           @map("crop_name")
+  imageUrl        String?          @map("image_url")
+  growthStatus    String           @map("growth_status")
+  anomalies       Json
+  environmentRisk String           @map("environment_risk")
+  suggestion      String
+  conclusion      String
+  createdAt       DateTime         @default(now()) @map("created_at")
+  user            User             @relation(fields: [userId], references: [id])
+  greenhouse      Greenhouse       @relation(fields: [greenhouseId], references: [id])
+  crop            Crop?            @relation(fields: [cropId], references: [id])
+  warnings        Warning[]
+  agentActionLogs AgentActionLog[]
+
+  @@index([userId])
+  @@index([greenhouseId])
+  @@index([cropId])
+  @@index([createdAt])
+  @@map("patrol_records")
+}
+
+model PatrolDemoRun {
+  id         String   @id
+  userId     String   @map("user_id")
+  requestKey String   @map("request_key")
+  payload    Json
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, requestKey])
+  @@index([userId, createdAt])
+  @@map("patrol_demo_runs")
+}
+
+model Warning {
+  id             String            @id @default(cuid())
+  userId         String?           @map("user_id")
+  greenhouseId   String            @map("greenhouse_id")
+  diagnosisId    String?           @map("diagnosis_id")
+  patrolRecordId String?           @map("patrol_record_id")
+  warningType    String            @map("warning_type")
+  level          String
+  title          String
+  content        String
+  status         String            @default("open")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  resolvedAt     DateTime?         @map("resolved_at")
+  user           User?             @relation(fields: [userId], references: [id])
+  greenhouse     Greenhouse        @relation(fields: [greenhouseId], references: [id])
+  diagnosis      DiseaseDiagnosis? @relation(fields: [diagnosisId], references: [id])
+  patrolRecord   PatrolRecord?     @relation(fields: [patrolRecordId], references: [id])
+
+  @@index([userId])
+  @@index([greenhouseId])
+  @@index([diagnosisId])
+  @@index([patrolRecordId])
+  @@index([level])
+  @@index([status])
+  @@index([createdAt])
+  @@map("warnings")
+}
+
+model Product {
+  id                String         @id @default(cuid())
+  ownerId           String         @map("owner_id")
+  cropId            String?        @map("crop_id")
+  name              String
+  category          String
+  imageUrl          String?        @map("image_url")
+  origin            String
+  specification     String?
+  price             Float?
+  harvestTime       DateTime?      @map("harvest_time")
+  cultivationMethod String?        @map("cultivation_method")
+  description       String?
+  avatarScript      String?        @map("avatar_script")
+  status            String         @default("draft")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  owner             User           @relation(fields: [ownerId], references: [id])
+  crop              Crop?          @relation(fields: [cropId], references: [id])
+  traces            ProductTrace[]
+
+  @@index([ownerId])
+  @@index([cropId])
+  @@index([category])
+  @@index([status])
+  @@index([createdAt])
+  @@map("products")
+}
+
+model ProductTrace {
+  id         String   @id @default(cuid())
+  productId  String   @map("product_id")
+  traceType  String   @map("trace_type")
+  title      String
+  content    String
+  occurredAt DateTime @map("occurred_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  product    Product  @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([traceType])
+  @@index([occurredAt])
+  @@map("product_traces")
+}
+
+model Device {
+  id           String          @id @default(cuid())
+  greenhouseId String          @map("greenhouse_id")
+  name         String
+  deviceType   String          @map("device_type")
+  status       String          @default("online")
+  lastOnlineAt DateTime?       @map("last_online_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  greenhouse   Greenhouse      @relation(fields: [greenhouseId], references: [id])
+  commands     DeviceCommand[]
+
+  @@index([greenhouseId])
+  @@index([deviceType])
+  @@index([status])
+  @@map("devices")
+}
+
+model DeviceCommand {
+  id              String           @id @default(cuid())
+  deviceId        String           @map("device_id")
+  operatorUserId  String?          @map("operator_user_id")
+  command         String
+  parameters      Json
+  operator        String
+  executionStatus String           @default("pending") @map("execution_status")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  executedAt      DateTime?        @map("executed_at")
+  device          Device           @relation(fields: [deviceId], references: [id])
+  operatorUser    User?            @relation(fields: [operatorUserId], references: [id])
+  agentActionLogs AgentActionLog[]
+
+  @@index([deviceId])
+  @@index([operatorUserId])
+  @@index([command])
+  @@index([operator])
+  @@index([executionStatus])
+  @@index([createdAt])
+  @@map("device_commands")
+}
+
+model AgentConversation {
+  id         String           @id @default(cuid())
+  userId     String           @map("user_id")
+  title      String?
+  channel    String           @default("web")
+  startedAt  DateTime         @default(now()) @map("started_at")
+  endedAt    DateTime?        @map("ended_at")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  user       User             @relation(fields: [userId], references: [id])
+  actionLogs AgentActionLog[]
+
+  @@index([userId])
+  @@index([channel])
+  @@index([startedAt])
+  @@map("agent_conversations")
+}
+
+model AgentActionLog {
+  id              String             @id @default(cuid())
+  userId          String             @map("user_id")
+  conversationId  String?            @map("conversation_id")
+  diagnosisId     String?            @map("diagnosis_id")
+  patrolRecordId  String?            @map("patrol_record_id")
+  deviceCommandId String?            @map("device_command_id")
+  userRequest     String             @map("user_request")
+  agentReasoning  String             @map("agent_reasoning")
+  toolName        String             @map("tool_name")
+  toolParameters  Json               @map("tool_parameters")
+  toolResult      Json               @map("tool_result")
+  finalReply      String             @map("final_reply")
+  executionStatus String             @default("success") @map("execution_status")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  user            User               @relation(fields: [userId], references: [id])
+  conversation    AgentConversation? @relation(fields: [conversationId], references: [id])
+  diagnosis       DiseaseDiagnosis?  @relation(fields: [diagnosisId], references: [id])
+  patrolRecord    PatrolRecord?      @relation(fields: [patrolRecordId], references: [id])
+  deviceCommand   DeviceCommand?     @relation(fields: [deviceCommandId], references: [id])
+
+  @@index([userId])
+  @@index([conversationId])
+  @@index([diagnosisId])
+  @@index([patrolRecordId])
+  @@index([deviceCommandId])
+  @@index([toolName])
+  @@index([executionStatus])
+  @@index([createdAt])
+  @@map("agent_action_logs")
+}
+
+model KnowledgeDocument {
+  id          String           @id @default(cuid())
+  title       String
+  category    String
+  sourceType  String           @default("manual") @map("source_type")
+  fileName    String?          @map("file_name")
+  contentHash String           @map("content_hash")
+  metadata    Json?
+  status      String           @default("active")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  chunks      KnowledgeChunk[]
+
+  @@index([category])
+  @@index([sourceType])
+  @@index([status])
+  @@index([createdAt])
+  @@map("knowledge_documents")
+}
+
+model KnowledgeChunk {
+  id         String            @id @default(cuid())
+  documentId String            @map("document_id")
+  chunkIndex Int               @map("chunk_index")
+  title      String
+  content    String
+  tokenCount Int               @map("token_count")
+  embedding  Json
+  createdAt  DateTime          @default(now()) @map("created_at")
+  document   KnowledgeDocument @relation(fields: [documentId], references: [id])
+
+  @@unique([documentId, chunkIndex])
+  @@index([documentId])
+  @@index([chunkIndex])
+  @@map("knowledge_chunks")
+}
+
+model KnowledgeRetrievalLog {
+  id           String   @id @default(cuid())
+  query        String
+  topK         Int      @map("top_k")
+  minScore     Float    @map("min_score")
+  results      Json
+  answer       String?
+  safetyNotice String?  @map("safety_notice")
+  status       String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("knowledge_retrieval_logs")
+}
