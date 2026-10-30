@@ -1,14 +1,17 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { KnowledgeChunkItem, KnowledgeDocumentSummary, KnowledgeSearchResult, LlmStatus } from "@agri/shared";
+import { useEffect, useId, useRef, useState } from "react";
+import type { KnowledgeCategoryCount, KnowledgeChunkItem, KnowledgeDocumentSummary, LlmStatus } from "@agri/shared";
 import {
   AlertCircle,
   BookOpen,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   FileText,
   Layers,
   Plus,
   RefreshCcw,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   UploadCloud,
@@ -26,6 +29,8 @@ const PRESET_CATEGORIES = [
   "农产品知识",
   "其他分类"
 ];
+
+const PAGE_SIZE = 10;
 
 function formatTime(isoString: string) {
   try {
@@ -45,9 +50,17 @@ export function KnowledgePage() {
   const { user } = useAuth();
   const canManage = user?.role === "admin";
   const [documents, setDocuments] = useState<KnowledgeDocumentSummary[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [totalChunks, setTotalChunks] = useState(0);
+  const [categoryCounts, setCategoryCounts] = useState<KnowledgeCategoryCount[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [activeTab, setActiveTab] = useState<"upload" | "manual">("upload");
   const [llmStatus, setLlmStatus] = useState<LlmStatus | null>(null);
+  const loadSeqRef = useRef(0);
+  const isFirstFilterRender = useRef(true);
 
   // Upload Form State
   const [dragActive, setDragActive] = useState(false);
@@ -71,33 +84,96 @@ export function KnowledgePage() {
   const [keyword, setKeyword] = useState("");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("all");
 
+  // Advanced Search State（高级检索：时间范围 / 来源类型 / 来源机构 / 排序）
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sourceTypeFilter, setSourceTypeFilter] = useState("all");
+  const [sourceKeyword, setSourceKeyword] = useState("");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const advancedActiveCount =
+    (dateFrom ? 1 : 0) +
+    (dateTo ? 1 : 0) +
+    (sourceTypeFilter !== "all" ? 1 : 0) +
+    (sourceKeyword.trim() ? 1 : 0) +
+    (sortOrder === "oldest" ? 1 : 0);
+
   // Chunk Modal State
   const [inspectingDoc, setInspectingDoc] = useState<KnowledgeDocumentSummary | null>(null);
   const [inspectingChunks, setInspectingChunks] = useState<KnowledgeChunkItem[]>([]);
   const [inspectingLoading, setInspectingLoading] = useState(false);
 
-  // RAG Search Debugger State
-  const [testQuery, setTestQuery] = useState("");
-  const [testResults, setTestResults] = useState<KnowledgeSearchResult[] | null>(null);
-  const [searching, setSearching] = useState(false);
-
-  // Load documents
-  const loadDocuments = async () => {
-    setLoading(true);
+  // Load documents with server-side pagination & filtering
+  const loadDocuments = async (reset = false) => {
+    const seq = ++loadSeqRef.current;
+    const targetPage = reset ? 1 : page + 1;
+    if (reset) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
     try {
-      const list = await api.listKnowledgeDocuments();
-      setDocuments(list);
+      const result = await api.listKnowledgeDocuments({
+        page: targetPage,
+        pageSize: PAGE_SIZE,
+        category: selectedCategoryFilter === "all" ? undefined : selectedCategoryFilter,
+        search: keyword.trim() || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        sourceType: sourceTypeFilter === "all" ? undefined : sourceTypeFilter,
+        source: sourceKeyword.trim() || undefined,
+        sortBy: sortOrder
+      });
+      if (seq !== loadSeqRef.current) return; // 丢弃过期响应，避免竞态覆盖
+      setDocuments((prev) => (reset ? result.items : [...prev, ...result.items]));
+      setTotal(result.total);
+      setTotalChunks(result.totalChunks);
+      setCategoryCounts(result.categories);
+      setPage(result.page);
+      setHasMore(result.hasMore);
     } catch {
-      setDocuments([]);
+      if (seq !== loadSeqRef.current) return;
+      if (reset) setDocuments([]);
+      setTotal(0);
+      setHasMore(false);
     } finally {
-      setLoading(false);
+      // 仅当响应未过期时才清理 loading 状态
+      if (seq === loadSeqRef.current) {
+        if (reset) {
+          setLoading(false);
+        } else {
+          setLoadingMore(false);
+        }
+      }
     }
   };
 
   useEffect(() => {
-    loadDocuments();
     api.getLlmStatus().then(setLlmStatus).catch(() => null);
   }, []);
+
+  // 首次进入立即加载；关键词/分类/高级检索条件变化时防抖 300ms 后重置到第一页
+  useEffect(() => {
+    if (isFirstFilterRender.current) {
+      isFirstFilterRender.current = false;
+      loadDocuments(true);
+      return;
+    }
+    const timer = setTimeout(() => {
+      loadDocuments(true);
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyword, selectedCategoryFilter, dateFrom, dateTo, sourceTypeFilter, sourceKeyword, sortOrder]);
+
+  // 重置全部高级检索条件
+  const resetAdvancedSearch = () => {
+    setDateFrom("");
+    setDateTo("");
+    setSourceTypeFilter("all");
+    setSourceKeyword("");
+    setSortOrder("newest");
+  };
 
   // Handle Drag & Drop
   const handleDrag = (e: React.DragEvent) => {
@@ -168,7 +244,7 @@ export function KnowledgePage() {
       setSelectedFile(null);
       setUploadTitle("");
       if (fileInputRef.current) fileInputRef.current.value = "";
-      await loadDocuments();
+      await loadDocuments(true);
     } catch (err) {
       setUploadMessage({ type: "error", text: err instanceof Error ? err.message : "上传失败，请检查文件内容。" });
     } finally {
@@ -202,7 +278,7 @@ export function KnowledgePage() {
       setUploadMessage({ type: "success", text: `知识《${manualTitle}》已成功入库！` });
       setManualTitle("");
       setManualContent("");
-      await loadDocuments();
+      await loadDocuments(true);
     } catch (err) {
       setUploadMessage({ type: "error", text: err instanceof Error ? err.message : "创建失败。" });
     } finally {
@@ -219,6 +295,12 @@ export function KnowledgePage() {
     try {
       await api.deleteKnowledgeDocument(doc.id);
       setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+      setTotal((t) => Math.max(0, t - 1));
+      setCategoryCounts((prev) =>
+        prev.map((c) =>
+          c.category === doc.category ? { ...c, count: Math.max(0, c.count - 1) } : c
+        )
+      );
       if (inspectingDoc?.id === doc.id) {
         setInspectingDoc(null);
       }
@@ -241,47 +323,8 @@ export function KnowledgePage() {
     }
   };
 
-  // Test RAG Search
-  const handleTestSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!testQuery.trim()) return;
-    setSearching(true);
-    try {
-      const results = await api.searchKnowledge(testQuery.trim());
-      setTestResults(results);
-    } catch {
-      setTestResults([]);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  // Filtered Documents
-  const filteredDocuments = useMemo(() => {
-    return documents.filter((doc) => {
-      const matchesKeyword =
-        !keyword ||
-        doc.title.toLowerCase().includes(keyword.toLowerCase()) ||
-        doc.category.toLowerCase().includes(keyword.toLowerCase()) ||
-        (doc.fileName && doc.fileName.toLowerCase().includes(keyword.toLowerCase()));
-
-      const matchesCategory =
-        selectedCategoryFilter === "all" || doc.category === selectedCategoryFilter;
-
-      return matchesKeyword && matchesCategory;
-    });
-  }, [documents, keyword, selectedCategoryFilter]);
-
-  // Distinct Categories for Filter
-  const allCategories = useMemo(() => {
-    const set = new Set<string>();
-    documents.forEach((doc) => set.add(doc.category));
-    return Array.from(set);
-  }, [documents]);
-
-  const totalChunks = useMemo(() => {
-    return documents.reduce((sum, doc) => sum + (doc._count?.chunks ?? 0), 0);
-  }, [documents]);
+  // 过滤与分页均在服务端完成：documents 为已加载的当前页数据，
+  // total/totalChunks/categoryCounts 为服务端返回的全量统计。
 
   return (
     <section className="page knowledge-page">
@@ -300,7 +343,7 @@ export function KnowledgePage() {
         <div className="stats-badges">
           <div className="stat-badge">
             <BookOpen size={16} />
-            <span>文档：<strong>{documents.length}</strong> 篇</span>
+            <span>文档：<strong>{total}</strong> 篇</span>
           </div>
           <div className="stat-badge">
             <Layers size={16} />
@@ -321,9 +364,10 @@ export function KnowledgePage() {
       </div>
 
       <div className="two-column knowledge-grid">
-        {/* Left Column: Upload / Create & RAG Test */}
-        <div className="knowledge-left-panel">
-          {canManage ? <section className="form-panel knowledge-input-card">
+        {/* 管理员：左侧上传/录入 + 右侧文档清单；普通用户：权限提示与文档清单上下排版 */}
+        {canManage ? (
+          <div className="knowledge-left-panel">
+            <section className="form-panel knowledge-input-card">
             <div className="knowledge-tabs">
               <button
                 className={activeTab === "upload" ? "active" : ""}
@@ -405,7 +449,7 @@ export function KnowledgePage() {
                   <input
                     value={uploadTitle}
                     onChange={(e) => setUploadTitle(e.target.value)}
-                    placeholder="例如：黄瓜霜霉病田间辨识与温湿度调控"
+                    placeholder="例如：玉米大斑病田间辨识与水肥调控"
                   />
                 </label>
 
@@ -448,7 +492,7 @@ export function KnowledgePage() {
                     value={manualTitle}
                     onChange={(e) => setManualTitle(e.target.value)}
                     required
-                    placeholder="例如：草莓炭疽病发病特征与隔离措施"
+                    placeholder="例如：玉米小斑病发病特征与隔离措施"
                   />
                 </label>
 
@@ -472,7 +516,7 @@ export function KnowledgePage() {
                     <input
                       value={customManualCategory}
                       onChange={(e) => setCustomManualCategory(e.target.value)}
-                      placeholder="例如：草莓育苗规范"
+                      placeholder="例如：玉米育苗规范"
                       required
                     />
                   </label>
@@ -495,72 +539,23 @@ export function KnowledgePage() {
                 </button>
               </form>
             )}
-          </section> : (
-            <section className="form-panel permission-notice">
-              <AlertCircle size={20} />
-              <span>普通用户可以查询和查看知识库；上传、录入和删除仅限管理员。</span>
-            </section>
-          )}
-
-          {/* RAG Search Debugger */}
-          <section className="form-panel rag-test-card">
-            <div className="card-header">
-              <div>
-                <h2>即时检索验证 (RAG Debugger)</h2>
-                <p className="card-subtext">输入提问，验证知识库是否能召回新入库的内容及其相似度得分。</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleTestSearch} className="rag-search-form">
-              <div className="search-input-group">
-                <input
-                  value={testQuery}
-                  onChange={(e) => setTestQuery(e.target.value)}
-                  placeholder="输入问题测试，例如：黄瓜叶片有黄褐色多角形斑点..."
-                />
-                <button className="secondary-button" type="submit" disabled={searching || !testQuery.trim()}>
-                  <Search size={16} />
-                  {searching ? "检索中" : "测试检索"}
-                </button>
-              </div>
-            </form>
-
-            {testResults !== null && (
-              <div className="test-results-box">
-                <div className="test-results-head">
-                  <span>检索召回结果 ({testResults.length} 个片段)</span>
-                  {testResults.length === 0 && <small className="tag-warning">未达到可靠阈值（将触发安全拒答）</small>}
-                </div>
-                {testResults.length === 0 ? (
-                  <p className="empty-hint">没有匹配到高于阈值的知识切片。建议检查文档是否包含该作物关键词。</p>
-                ) : (
-                  <div className="test-chunk-list">
-                    {testResults.map((res, i) => (
-                      <div className="test-chunk-card" key={res.chunkId}>
-                        <div className="test-chunk-top">
-                          <span className="rank-badge">#{i + 1}</span>
-                          <strong>{res.documentTitle}</strong>
-                          <span className="category-pill">{res.category}</span>
-                          <span className="score-badge">相似度: {(res.score * 100).toFixed(1)}%</span>
-                        </div>
-                        <p className="test-chunk-snippet">{res.content}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </section>
-        </div>
+          </div>
+        ) : (
+          <section className="form-panel permission-notice knowledge-permission-full">
+            <AlertCircle size={20} />
+            <span>普通用户可以查询和查看知识库；上传、录入和删除仅限管理员。</span>
+          </section>
+        )}
 
         {/* Right Column: Knowledge Document List */}
-        <section className="list-panel knowledge-list-card">
+        <section className={`list-panel knowledge-list-card ${canManage ? "" : "knowledge-list-full"}`}>
           <div className="knowledge-list-header">
             <div>
-              <h2>已入库文档清单 ({filteredDocuments.length})</h2>
+              <h2>已入库文档清单 ({total})</h2>
               <p className="card-subtext">这些知识已切块编码并作为数字人回答事实依据。</p>
             </div>
-            <button className="icon-button" title="刷新列表" onClick={loadDocuments} disabled={loading}>
+            <button className="icon-button" title="刷新列表" onClick={() => loadDocuments(true)} disabled={loading}>
               <RefreshCcw size={16} className={loading ? "spin" : ""} />
             </button>
           </div>
@@ -585,28 +580,123 @@ export function KnowledgePage() {
                 className={`filter-chip ${selectedCategoryFilter === "all" ? "active" : ""}`}
                 onClick={() => setSelectedCategoryFilter("all")}
               >
-                全部 ({documents.length})
+                全部 ({total})
               </button>
-              {allCategories.map((cat) => (
+              {categoryCounts.map((c) => (
                 <button
-                  key={cat}
-                  className={`filter-chip ${selectedCategoryFilter === cat ? "active" : ""}`}
-                  onClick={() => setSelectedCategoryFilter(cat)}
+                  key={c.category}
+                  className={`filter-chip ${selectedCategoryFilter === c.category ? "active" : ""}`}
+                  onClick={() => setSelectedCategoryFilter(c.category)}
                 >
-                  {cat}
+                  {c.category} ({c.count})
                 </button>
               ))}
             </div>
+
+            {/* 高级检索：时间日期 / 知识库来源 / 排序 */}
+            <div className="advanced-search-toggle">
+              <button
+                className={`advanced-toggle-btn ${showAdvanced || advancedActiveCount > 0 ? "active" : ""}`}
+                onClick={() => setShowAdvanced((v) => !v)}
+                aria-expanded={showAdvanced}
+              >
+                <SlidersHorizontal size={14} />
+                高级检索
+                {advancedActiveCount > 0 && (
+                  <span className="filter-count-badge">{advancedActiveCount}</span>
+                )}
+                {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+            </div>
+
+            {showAdvanced && (
+              <div className="advanced-search-panel">
+                <div className="adv-search-row">
+                  <label htmlFor="adv-date-from">入库时间</label>
+                  <div className="adv-date-range">
+                    <input
+                      id="adv-date-from"
+                      type="date"
+                      value={dateFrom}
+                      max={dateTo || undefined}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                    />
+                    <span>至</span>
+                    <input
+                      id="adv-date-to"
+                      type="date"
+                      value={dateTo}
+                      min={dateFrom || undefined}
+                      onChange={(e) => setDateTo(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="adv-search-row">
+                  <label htmlFor="adv-source-type">来源类型</label>
+                  <select
+                    id="adv-source-type"
+                    value={sourceTypeFilter}
+                    onChange={(e) => setSourceTypeFilter(e.target.value)}
+                  >
+                    <option value="all">全部来源</option>
+                    <option value="manual">手动录入</option>
+                    <option value="upload">文件上传</option>
+                    <option value="seed">系统预置</option>
+                  </select>
+                </div>
+
+                <div className="adv-search-row">
+                  <label htmlFor="adv-source-org">来源机构</label>
+                  <input
+                    id="adv-source-org"
+                    type="text"
+                    value={sourceKeyword}
+                    onChange={(e) => setSourceKeyword(e.target.value)}
+                    placeholder="如：农业农村部、全国农技中心（匹配文档标注的来源）"
+                  />
+                </div>
+
+                <div className="adv-search-row">
+                  <label htmlFor="adv-sort">排序方式</label>
+                  <select
+                    id="adv-sort"
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value as "newest" | "oldest")}
+                  >
+                    <option value="newest">最新入库优先</option>
+                    <option value="oldest">最早入库优先</option>
+                  </select>
+                </div>
+
+                <div className="adv-search-actions">
+                  <button
+                    type="button"
+                    className="secondary-button adv-reset-btn"
+                    onClick={resetAdvancedSearch}
+                    disabled={advancedActiveCount === 0}
+                  >
+                    重置高级条件
+                  </button>
+                  <span className="adv-hint">条件变更后自动刷新列表</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="doc-list-scroll">
-            {filteredDocuments.length === 0 ? (
+            {loading ? (
+              <div className="empty-state">
+                <RefreshCcw size={32} className="spin" />
+                <p>正在加载文档清单...</p>
+              </div>
+            ) : documents.length === 0 ? (
               <div className="empty-state">
                 <BookOpen size={40} />
-                <p>{keyword || selectedCategoryFilter !== "all" ? "没有找到符合筛选条件的文档。" : "暂无知识文档，请先在左侧拖拽上传或录入。"}</p>
+                <p>{keyword || selectedCategoryFilter !== "all" || advancedActiveCount > 0 ? "没有找到符合筛选条件的文档，请调整关键词或高级检索条件。" : "暂无知识文档，请先在左侧拖拽上传或录入。"}</p>
               </div>
             ) : (
-              filteredDocuments.map((doc) => (
+              documents.map((doc) => (
                 <article className="knowledge-doc-card" key={doc.id}>
                   <div className="doc-card-main">
                     <div className="doc-card-badges">
@@ -654,6 +744,23 @@ export function KnowledgePage() {
               ))
             )}
           </div>
+
+          {!loading && documents.length > 0 && (
+            <div className="doc-pagination-bar">
+              <span className="doc-pagination-info">
+                已加载 {documents.length} / {total} 篇
+              </span>
+              {hasMore && (
+                <button
+                  className="secondary-button"
+                  onClick={() => loadDocuments(false)}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? "加载中..." : "加载更多"}
+                </button>
+              )}
+            </div>
+          )}
         </section>
       </div>
 

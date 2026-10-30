@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
-import { Send, Square, Volume2, VolumeX } from "lucide-react";
+import { Mic, MicOff, Send, Square, Volume2, VolumeX } from "lucide-react";
 import { useAssistant } from "./assistantContext";
 
 export function AssistantChat({ compact = false }: { compact?: boolean }) {
@@ -17,28 +17,44 @@ export function AssistantChat({ compact = false }: { compact?: boolean }) {
   return (
     <section
       className={`chat-panel assistant-chat ${compact ? "assistant-chat-compact" : ""} ${assistant.reducedMotion ? "is-reduced-motion" : ""}`}
-      aria-label="与农小贝对话"
+      aria-label="与小墨对话"
     >
       <div className="assistant-chat-heading">
         <div>
-          <strong>与农小贝对话</strong>
+          <strong>与小墨对话</strong>
           <small>跨页面保留当前对话</small>
         </div>
-        <button
-          className="icon-button"
-          disabled={
-            assistant.busy ||
-            assistant.patrolActive ||
-            !("speechSynthesis" in window)
-          }
-          onClick={assistant.speakLastReply}
-          aria-label={
-            assistant.speaking ? "停止浏览器播报" : "浏览器播报最近回答"
-          }
-          title="使用浏览器语音播报"
-        >
-          {assistant.speaking ? <VolumeX size={17} /> : <Volume2 size={17} />}
-        </button>
+        <div className="assistant-chat-heading-actions">
+          <button
+            className={`icon-button ${assistant.autoSpeak ? "is-on" : ""}`}
+            onClick={assistant.toggleAutoSpeak}
+            aria-label={
+              assistant.autoSpeak ? "关闭回答自动播报" : "开启回答自动播报"
+            }
+            title={
+              assistant.autoSpeak
+                ? "回答后自动念出（已开启）"
+                : "回答后自动念出（已关闭）"
+            }
+          >
+            {assistant.autoSpeak ? <Volume2 size={17} /> : <VolumeX size={17} />}
+          </button>
+          <button
+            className="icon-button"
+            disabled={
+              assistant.busy ||
+              assistant.patrolActive ||
+              !("speechSynthesis" in window)
+            }
+            onClick={assistant.speakLastReply}
+            aria-label={
+              assistant.speaking ? "停止浏览器播报" : "浏览器播报最近回答"
+            }
+            title="手动播报最近回答"
+          >
+            {assistant.speaking ? <VolumeX size={17} /> : <Volume2 size={17} />}
+          </button>
+        </div>
       </div>
       <div
         className="chat-list"
@@ -101,19 +117,44 @@ export function AssistantChat({ compact = false }: { compact?: boolean }) {
           void assistant.sendMessage();
         }}
       >
+        <button
+          type="button"
+          className={`primary-icon-button mic-button ${assistant.micListening ? "is-recording" : ""}`}
+          disabled={
+            !assistant.micSupported ||
+            assistant.busy ||
+            assistant.patrolActive
+          }
+          onClick={() => {
+            if (assistant.micListening) assistant.stopMicListening();
+            else assistant.startMicListening();
+          }}
+          aria-label={assistant.micListening ? "停止语音输入" : "按住说话，点击开始语音输入"}
+          title={
+            assistant.micSupported
+              ? assistant.micListening
+                ? "正在聆听，点击停止"
+                : "点击说话，说完自动发送"
+              : "当前浏览器不支持语音识别，请使用 Chrome / Edge"
+          }
+        >
+          {assistant.micListening ? <MicOff size={18} /> : <Mic size={18} />}
+        </button>
         <input
-          aria-label="向农小贝提问"
+          aria-label="向小墨提问"
           value={assistant.input}
-          disabled={assistant.busy || assistant.patrolActive}
+          disabled={assistant.busy || assistant.patrolActive || assistant.micListening}
           onFocus={() => assistant.setListening(true)}
           onBlur={() => assistant.setListening(false)}
           onChange={(event) => assistant.setInput(event.target.value)}
           placeholder={
-            assistant.patrolActive
-              ? "请先完成或取消当前巡田"
-              : assistant.busy
-                ? "分析中，可切换页面…"
-                : "输入农业问题…"
+            assistant.micListening
+              ? "正在聆听…"
+              : assistant.patrolActive
+                ? "请先完成或取消当前巡田"
+                : assistant.busy
+                  ? "分析中，可切换页面…"
+                  : "输入或点击麦克风提问…"
           }
         />
         {assistant.busy ? (

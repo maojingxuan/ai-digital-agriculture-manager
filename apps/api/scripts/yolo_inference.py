@@ -210,6 +210,86 @@ DISEASE_TRANSLATIONS = {
         "riskLevel": "medium",
         "category": "真菌性病害",
         "description": "病斑呈芝麻粒大小椭圆形，黄褐色至灰褐色，多发生于缺肥或早衰田块。"
+    },
+    # ---------------------------------------------------------------------------
+    # 玉米 11 类病害模型（corn_disease_best.pt，由 L1742/corndisease 数据集训练）
+    # ---------------------------------------------------------------------------
+    "Blight": {
+        "nameZh": "玉米大斑病",
+        "crop": "玉米",
+        "riskLevel": "high",
+        "category": "真菌性病害",
+        "description": "病斑梭形或长条形，灰褐色至黑褐色，多由大斑凸脐蠕孢菌侵染，高湿寡照易流行。"
+    },
+    "brown_spot": {
+        "nameZh": "玉米褐斑病",
+        "crop": "玉米",
+        "riskLevel": "medium",
+        "category": "真菌性病害",
+        "description": "叶片散生黄褐色至红褐色圆形小斑，后期病斑融合，多发生在高温高湿的喇叭口期。"
+    },
+    "corn_rust": {
+        "nameZh": "玉米锈病",
+        "crop": "玉米",
+        "riskLevel": "high",
+        "category": "真菌性病害",
+        "description": "叶片正反面散生黄褐色至红褐色隆起疱斑（夏孢子堆），后期破裂散出铁锈色粉末。"
+    },
+    "corn_smut": {
+        "nameZh": "玉米黑穗病（黑粉病）",
+        "crop": "玉米",
+        "riskLevel": "medium",
+        "category": "真菌性病害",
+        "description": "病部形成灰白色至黑色肿瘤状菌瘿（病瘤），成熟后破裂散出黑粉状冬孢子。"
+    },
+    "downy_mildew": {
+        "nameZh": "玉米霜霉病",
+        "crop": "玉米",
+        "riskLevel": "high",
+        "category": "真菌性病害",
+        "description": "叶片沿叶脉产生黄绿相间条斑，叶背潮湿时可见灰白色霜状霉层，植株矮化黄化。"
+    },
+    "fall-armyworm-larva": {
+        "nameZh": "草地贪夜蛾幼虫",
+        "crop": "玉米",
+        "riskLevel": "high",
+        "category": "重大迁飞性害虫",
+        "description": "幼虫头部具倒Y形纹，取食心叶和叶肉呈窗纸状孔洞，严重时将叶片啃食殆尽。"
+    },
+    "grey_leaf_spot": {
+        "nameZh": "玉米灰斑病",
+        "crop": "玉米",
+        "riskLevel": "medium",
+        "category": "真菌性病害",
+        "description": "病斑沿叶脉平行延伸呈矩形至窄长条形，灰褐色，后期多个病斑融合致叶片枯死。"
+    },
+    "healthy": {
+        "nameZh": "健康玉米",
+        "crop": "玉米",
+        "riskLevel": "low",
+        "category": "健康植株",
+        "description": "植株长势健壮，叶片色泽正常，无明显病斑、霉层或虫蛀孔洞。"
+    },
+    "maize-streak-disease": {
+        "nameZh": "玉米条纹矮缩病（条纹病毒病）",
+        "crop": "玉米",
+        "riskLevel": "high",
+        "category": "病毒性病害",
+        "description": "叶脉间出现断续黄白色条纹或点线，植株矮化、叶色褪绿，由叶蝉等媒介传播病毒引起。"
+    },
+    "yellow-stem-borer": {
+        "nameZh": "玉米螟（茎秆钻蛀害虫）",
+        "crop": "玉米",
+        "riskLevel": "high",
+        "category": "钻蛀性害虫",
+        "description": "幼虫钻蛀茎秆、雌穗和穗柄，蛀孔周围可见虫粪，遇风易折茎，严重影响产量。"
+    },
+    "yellow-stem-borer-larva": {
+        "nameZh": "玉米螟幼虫",
+        "crop": "玉米",
+        "riskLevel": "high",
+        "category": "钻蛀性害虫",
+        "description": "幼虫孵化后先啃食心叶和叶腋，后蛀入茎秆，呈透明窗纸状或排孔状危害状。"
     }
 }
 

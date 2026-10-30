@@ -11,6 +11,11 @@ const statusNames = {
   failed: "需要重试",
   complete: "报告已保存",
 };
+const greenhouseStatusText = {
+  optimal: "环境优秀",
+  attention: "需要关注",
+  warning: "存在风险",
+};
 export function PatrolDemoPanel({ compact = false }: { compact?: boolean }) {
   const assistant = useAssistant();
   const demo = assistant.patrol;
@@ -38,54 +43,45 @@ export function PatrolDemoPanel({ compact = false }: { compact?: boolean }) {
         <div>
           <div className="context-tag">
             <span className="live-indicator-dot" />
-            <span>智能巡检引擎 · 仿真基准流</span>
+            <span>智能巡检引擎 · 农业数据联动</span>
           </div>
-          <h2>农小贝自主巡田</h2>
+          <h2>小墨自主巡田</h2>
         </div>
         <div className="demo-meta-badges">
-          <span className="badge-source">SIM-SERIES-A</span>
+          <span className="badge-source">AGR-DATA-LIVE</span>
           <span className="badge-status">可交互</span>
         </div>
       </div>
       <div className="demo-instrument-bar">
-        <span className="instrument-chip">环境源: 温室测点基准</span>
-        <span className="instrument-chip">视觉: 局部表型解算</span>
-        <span className="instrument-chip">知识库: 设施番茄病虫害图谱</span>
+        <span className="instrument-chip">环境源: 农业数据中心 · 大棚实时监测</span>
+        <span className="instrument-chip">视觉: 监测状态对应叶片演示</span>
+        <span className="instrument-chip">知识库: 玉米病虫害图谱</span>
       </div>
       {!run && (
         <>
           <div
             className="demo-scenarios"
             role="group"
-            aria-label="选择仿真场景"
+            aria-label="选择巡检大棚"
           >
-            {demo.scenarios.map((scenario) => (
+            {demo.greenhouses.map((greenhouse) => (
               <button
-                key={scenario.id}
-                aria-pressed={demo.scenarioId === scenario.id}
-                onClick={() => demo.chooseScenario(scenario.id)}
+                key={greenhouse.id}
+                aria-pressed={demo.greenhouseId === greenhouse.id}
+                onClick={() => demo.chooseGreenhouse(greenhouse.id)}
                 disabled={demo.operating || assistant.busy}
               >
-                {scenario.name}
+                <strong>{greenhouse.name}</strong>
+                <small>
+                  {greenhouse.location ? `${greenhouse.location} · ` : ""}
+                  {greenhouseStatusText[greenhouse.status]}
+                </small>
               </button>
             ))}
           </div>
           <div className="demo-inputs">
             <label>
-              仿真湿度 (%)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={demo.humidity}
-                onChange={(event) =>
-                  demo.setHumidity(Number(event.target.value))
-                }
-                disabled={demo.operating || assistant.busy}
-              />
-            </label>
-            <label>
-              演示预警阈值 (%)
+              预警阈值 (%)
               <input
                 type="number"
                 min="70"
@@ -99,7 +95,8 @@ export function PatrolDemoPanel({ compact = false }: { compact?: boolean }) {
             </label>
           </div>
           <p className="demo-help">
-            巡检全流程约 60 秒，各步骤严格对应农艺证据链与结构化复核项。
+            湿度、温度与土壤湿度读取所选大棚的实时监测数据（农业环境数据中心），无需手动输入。巡检全流程约 60
+            秒，各步骤严格对应农艺证据链与结构化复核项。
           </p>
         </>
       )}
@@ -112,9 +109,8 @@ export function PatrolDemoPanel({ compact = false }: { compact?: boolean }) {
               demo.loading ||
               demo.operating ||
               assistant.busy ||
-              !demo.scenarios.length ||
-              demo.humidity < 0 ||
-              demo.humidity > 100 ||
+              !demo.greenhouses.length ||
+              !demo.greenhouseId ||
               demo.threshold < 70 ||
               demo.threshold > 95
             }
@@ -177,7 +173,7 @@ export function PatrolDemoPanel({ compact = false }: { compact?: boolean }) {
             }}
           >
             <RotateCcw size={16} />
-            复位场景
+            复位选择
           </button>
         )}
         <button

@@ -54,7 +54,7 @@ function App() {
             </div>
             <div>
               <strong>AI数字农业管家</strong>
-              <span>农小贝 · 数字农业管家</span>
+              <span>小墨 · 数字农业管家</span>
             </div>
           </div>
           <nav className="nav-list">

@@ -56,6 +56,15 @@ export type AssistantContextValue = {
   setListening: (value: boolean) => void;
   speaking: boolean;
   speakLastReply: () => void;
+  micSupported: boolean;
+  micListening: boolean;
+  startMicListening: () => void;
+  stopMicListening: () => void;
+  autoSpeak: boolean;
+  toggleAutoSpeak: () => void;
+  voiceName: string;
+  setVoiceName: (name: string) => void;
+  availableVoices: SpeechSynthesisVoice[];
   debugAction: (action: AvatarAction | null) => void;
 };
 export const AssistantContext = createContext<AssistantContextValue | null>(
@@ -63,6 +72,6 @@ export const AssistantContext = createContext<AssistantContextValue | null>(
 );
 export function useAssistant() {
   const context = useContext(AssistantContext);
-  if (!context) throw new Error("农小贝助手尚未初始化");
+  if (!context) throw new Error("小墨助手尚未初始化");
   return context;
 }

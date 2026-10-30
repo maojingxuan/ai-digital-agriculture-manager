@@ -2,14 +2,16 @@ import {
   lazy,
   Suspense,
   useLayoutEffect,
+  useRef,
   useState,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Bot, Maximize2, Minus, X } from "lucide-react";
 import { AssistantChat } from "./AssistantChat";
 import { phaseLabels, useAssistant } from "./assistantContext";
-const NongxiaobeiAvatar = lazy(() => import("../components/NongxiaobeiAvatar"));
+const XiaoMoAvatar = lazy(() => import("../components/XiaoMoAvatar"));
 const pageLabels: Record<string, string> = {
   "/data": "农业数据",
   "/diagnosis": "作物问诊",
@@ -25,6 +27,33 @@ export function AssistantShell() {
   const assistant = useAssistant();
   const home = pathname === "/";
   const [stageRect, setStageRect] = useState<CSSProperties | null>(null);
+  const companionRef = useRef<HTMLElement | null>(null);
+  const drag = useRef<{ x: number; y: number } | null>(null);
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const startDrag = (event: ReactPointerEvent) => {
+    if (home) return;
+    const target = event.target as HTMLElement;
+    if (target.closest(".assistant-chat")) return;
+    if (target.closest("button, a, input, textarea, label, select")) return;
+    const el = companionRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    drag.current = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+    el.setPointerCapture(event.pointerId);
+  };
+  const moveDrag = (event: ReactPointerEvent) => {
+    if (!drag.current || !companionRef.current) return;
+    setDragPos({
+      x: event.clientX - drag.current.x,
+      y: event.clientY - drag.current.y,
+    });
+  };
+  const endDrag = () => {
+    drag.current = null;
+  };
   const expanded = !home && assistant.companionMode === "expanded";
   const hidden = !home && assistant.companionMode === "hidden";
   // Track the dashboard slot without reparenting the canvas or reloading GLB.
@@ -62,15 +91,26 @@ export function AssistantShell() {
   return (
     <>
       <aside
+        ref={companionRef}
         className={`assistant-shell ${home ? "assistant-home" : "assistant-companion"} ${expanded ? "is-expanded" : ""} ${hidden ? "is-hidden" : ""}`}
-        style={home ? (stageRect ?? { visibility: "hidden" }) : undefined}
-        aria-label="农小贝数字人"
+        style={
+          home
+            ? (stageRect ?? { visibility: "hidden" })
+            : dragPos
+              ? { left: dragPos.x, top: dragPos.y, right: "auto", bottom: "auto" }
+              : undefined
+        }
+        aria-label="小墨数字人"
         aria-hidden={hidden || undefined}
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
       >
         <div className="assistant-shell-heading" hidden={home}>
           <span>
             <i className={assistant.busy ? "is-busy" : ""} />
-            农小贝 · {pageLabels[pathname] ?? "随行助手"}
+            小墨 · {pageLabels[pathname] ?? "随行助手"}
           </span>
           <div>
             <button
@@ -85,7 +125,7 @@ export function AssistantShell() {
             </button>
             <button
               className="icon-button"
-              aria-label="隐藏农小贝"
+              aria-label="隐藏小墨"
               onClick={() => assistant.setCompanionMode("hidden")}
             >
               <X size={15} />
@@ -95,26 +135,20 @@ export function AssistantShell() {
         <div className="assistant-viewport">
           <Suspense
             fallback={
-              <div className="nongxiaobei-stage nongxiaobei-loading">
-                正在准备农小贝…
-              </div>
+              <div className="xiaomo-loading">正在准备小墨…</div>
             }
           >
-            <NongxiaobeiAvatar
+            <XiaoMoAvatar
               action={assistant.action}
-              cameraPreset={home ? assistant.camera : "portrait"}
+              cameraPreset="full"
               cameraRevision={assistant.cameraRevision}
               reducedMotion={assistant.reducedMotion}
               active={!hidden}
-              compact={!home}
             />
           </Suspense>
           <div className="assistant-stage-tag">
-            {home ? "农小贝 · 虚拟农艺专家" : phaseLabels[assistant.task.phase]}
+            {home ? "小墨 · 虚拟农艺专家" : phaseLabels[assistant.task.phase]}
           </div>
-          {home && (
-            <div className="assistant-stage-footnote">仿真测控节点 #01 · 运行中</div>
-          )}
         </div>
         {!home && (
           <div className="assistant-companion-caption">
@@ -151,10 +185,10 @@ export function AssistantShell() {
         <button
           className="assistant-launcher"
           onClick={() => assistant.setCompanionMode("compact")}
-          aria-label="显示农小贝"
+          aria-label="显示小墨"
         >
           <Bot size={22} />
-          <span>农小贝{assistant.busy ? " · 分析中" : ""}</span>
+          <span>小墨{assistant.busy ? " · 分析中" : ""}</span>
         </button>
       )}
     </>

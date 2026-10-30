@@ -7,15 +7,19 @@ import {
   type DemoKnowledgeSource,
   type DemoReportEvidence,
   type DemoRun,
+  type DemoScenario,
   type DemoStepId,
   type PatrolReport,
   type StartDemoInput,
 } from "@agri/shared";
 import {
   demoKnowledge,
-  demoScenarios,
   searchDemoKnowledge,
 } from "./patrolDemoKnowledge.js";
+import {
+  getGreenhouses,
+  getRealtimeSnapshot,
+} from "./sensorSimulator.js";
 
 const stepIds: DemoStepId[] = [
   "observe",
@@ -25,6 +29,16 @@ const stepIds: DemoStepId[] = [
   "advice",
   "save",
 ];
+// 从所选大棚名称推断作物，用于巡田报告归档；无法识别时使用通用名称。
+function inferCrop(greenhouseName: string): string {
+  const keywords: Array<[string, string]> = [
+    ["玉米", "玉米"],
+    ["制种", "玉米"],
+  ];
+  for (const [keyword, crop] of keywords)
+    if (greenhouseName.includes(keyword)) return crop;
+  return "玉米";
+}
 const terminal = (run: DemoRun) =>
   run.status === "complete" || run.status === "cancelled";
 const json = (run: DemoRun) =>
@@ -144,20 +158,48 @@ export class PatrolDemoService {
       const active = await this.current(user);
       if (active && !terminal(active))
         throw new DemoError("已有未结束巡田，请继续、重试或取消后再开始。 ");
-      const scenario = demoScenarios.find(
-        (item) => item.id === input.scenarioId,
+      const greenhouse = getGreenhouses().find(
+        (item) => item.id === input.greenhouseId,
       );
-      if (!scenario) throw new DemoError("仿真场景不存在。", 400);
+      if (!greenhouse)
+        throw new DemoError("所选大棚不存在，请重新选择后开始巡田。", 400);
+      // 读取农业数据模块（农业环境数据中心）中该大棚的实时监测数据。
+      const snapshot = getRealtimeSnapshot(greenhouse.id);
+      const humidity =
+        snapshot.metrics.find((metric) => metric.key === "humidity")?.value ?? 0;
+      const temperature =
+        snapshot.metrics.find((metric) => metric.key === "temperature")?.value ??
+        0;
+      const soilMoisture =
+        snapshot.metrics.find((metric) => metric.key === "soil_moisture")
+          ?.value ?? 0;
+      const risk = humidity >= input.threshold;
+      const scenario: DemoScenario = {
+        id: risk ? "high-humidity" : "normal",
+        name: risk
+          ? `高湿关注 · ${greenhouse.name}`
+          : `常规巡田 · ${greenhouse.name}`,
+        plotName: greenhouse.name,
+        humidity,
+        temperature,
+        soilMoisture,
+        imageUrl: risk ? "/demo/tomato-spots.svg" : "/demo/tomato-normal.svg",
+        imageSource: `来自农业环境数据中心「${greenhouse.name}」实时监测的演示示意；不是实拍照片。`,
+        visualFinding: risk
+          ? `演示设定：${greenhouse.name}当前湿度 ${humidity}% 已达预警阈值 ${input.threshold}%，以黄斑叶片示意环境风险，需人工复核；不是病害确诊。`
+          : `演示设定：${greenhouse.name}当前环境平稳，未标出明显叶部异常；不等于真实植株健康。`,
+      };
       const time = new Date().toISOString();
       const run: DemoRun = {
         id: `demo-${randomUUID()}`,
         userId: user.id,
+        greenhouseId: greenhouse.id,
         scenario: structuredClone(scenario),
-        humidity: input.humidity,
+        humidity,
         threshold: input.threshold,
         status: "running",
         currentStep: 0,
-        caption: "农小贝准备读取固定仿真数据，不连接真实设备。",
+        caption: `农小贝准备读取「${greenhouse.name}」实时监测数据，不连接真实设备。`,
         createdAt: time,
         updatedAt: time,
         steps: stepIds.map((id) => ({
@@ -249,7 +291,7 @@ export class PatrolDemoService {
       try {
         switch (step.id) {
           case "observe":
-            run.caption = `已读取仿真数据：湿度 ${run.humidity}%、温度 ${run.scenario.temperature}℃。数据固定，不随时间随机漂移。`;
+            run.caption = `已读取所选大棚「${run.scenario.plotName}」实时监测数据：湿度 ${run.humidity}%、温度 ${run.scenario.temperature}℃、土壤湿度 ${run.scenario.soilMoisture}%。数据来自农业环境数据中心。`;
             break;
           case "environment": {
             const risk = run.humidity >= run.threshold;
@@ -259,10 +301,10 @@ export class PatrolDemoService {
               temperature: run.scenario.temperature,
               soilMoisture: run.scenario.soilMoisture,
               risk,
-              source: "simulation",
+              source: "agriculture",
               explanation: risk
-                ? `湿度 ${run.humidity}% ≥ 演示预警阈值 ${run.threshold}%，触发环境风险提醒；这不是病害诊断。`
-                : `湿度 ${run.humidity}% < 演示预警阈值 ${run.threshold}%，本轮未触发高湿提醒；低于阈值不代表无病害。`,
+                ? `所选大棚「${run.scenario.plotName}」实时湿度 ${run.humidity}% ≥ 预警阈值 ${run.threshold}%，触发环境风险提醒；这不是病害诊断。`
+                : `所选大棚「${run.scenario.plotName}」实时湿度 ${run.humidity}% < 预警阈值 ${run.threshold}%，本轮未触发高湿提醒；低于阈值不代表无病害。`,
             };
             run.caption = run.environment.explanation;
             break;
@@ -274,15 +316,15 @@ export class PatrolDemoService {
               source: run.scenario.imageSource,
               finding: run.scenario.visualFinding,
               notice:
-                "演示视觉结果：读取场景预设，没有执行图像模型推理，没有置信度；不能用于真实诊断。",
+                "演示视觉结果：使用农业数据中心监测状态对应的预设叶片示意，没有执行图像模型推理，没有置信度；不能用于真实诊断。",
             };
             run.caption = run.visual.finding;
             break;
           case "knowledge":
             run.sources = searchDemoKnowledge(
               run.environment?.risk
-                ? "番茄高湿湿度通风叶片叶霉病复核"
-                : "番茄叶片叶面灌溉巡查复核",
+                ? "玉米高湿湿度通风叶片叶斑病复核"
+                : "玉米叶片叶面灌溉巡查复核",
               this.knowledge,
             );
             if (!run.sources.length)
@@ -295,13 +337,13 @@ export class PatrolDemoService {
             const flagged = run.scenario.id === "high-humidity";
             run.recommendations = [
               run.environment?.risk
-                ? "[1,2] 人工检查通风与空气流动条件，记录连续湿度和叶面结露情况；本系统不会自动控制设备。"
-                : "[3] 保持常规环境记录和巡查；本轮未触发高湿预警，仍需关注叶面水分。",
+                ? `[1,2] 「${run.scenario.plotName}」触发高湿提醒：人工检查通风与空气流动条件，记录连续湿度和叶面结露情况；本系统不会自动控制设备。`
+                : `[3] 「${run.scenario.plotName}」本轮未触发高湿预警，保持常规环境记录和巡查；仍需关注叶面水分。`,
               "[1,3] 浇水尽量避开叶面，补拍清晰的叶片正反面照片，记录异常范围与变化。",
               flagged
-                ? "[1] 演示黄斑仅提示需要复核，不能据此确诊叶霉病、晚疫病或其他病害。"
+                ? "[1] 演示黄斑仅提示需要复核，不能据此确诊大斑病、小斑病或其他病害。"
                 : "演示未标注异常不等于真实健康，仍需现场确认。",
-              "未经现场复核不生成农药品种、剂量或施用指令；模拟环境与视觉演示不得替代植保人员判断。",
+              "未经现场复核不生成农药品种、剂量或施用指令；监测数据与视觉演示不得替代植保人员判断。",
             ];
             // Reference numbers refer to canonical documents, not variable rank order.
             run.sources = this.knowledge.map((source) => ({
@@ -370,21 +412,25 @@ export class PatrolDemoService {
     finished.status = "complete";
     finished.reportId = reportId;
     finished.caption =
-      "巡田报告与人工复核任务已保存。可从历史记录查看；这是仿真演示报告，不是真实诊断。";
+      "巡田报告与人工复核任务已保存。可从历史记录查看；环境数据来自农业环境数据中心，视觉为演示预设，不是真实诊断。";
     delete finished.nextAdvanceAt;
     finished.steps[finished.currentStep].status = "completed";
     finished.steps[finished.currentStep].finishedAt = new Date().toISOString();
     finished.steps[finished.currentStep].detail = finished.caption;
     finished.updatedAt = new Date().toISOString();
     await this.prisma.$transaction(async (tx) => {
-      const greenhouseId = `simulation-${run.userId}`;
+      // 内置演示大棚使用仿真标识避免污染真实大棚数据；自定义大棚直接关联原记录。
+      const builtIn = run.greenhouseId.startsWith("demo-");
+      const greenhouseId = builtIn
+        ? `simulation-${run.greenhouseId}`
+        : run.greenhouseId;
       await tx.greenhouse.upsert({
         where: { id: greenhouseId },
         update: {},
         create: {
           id: greenhouseId,
           name: run.scenario.plotName,
-          location: "本地仿真场景，非真实硬件",
+          location: builtIn ? "本地仿真场景，非真实硬件" : undefined,
           ownerId: run.userId,
         },
       });
@@ -396,16 +442,16 @@ export class PatrolDemoService {
           userId: run.userId,
           greenhouseId,
           plotName: run.scenario.plotName,
-          cropName: "番茄",
+          cropName: inferCrop(run.scenario.plotName),
           imageUrl: run.visual!.imageUrl,
-          growthStatus: "仿真演示 · 真实长势待现场确认",
+          growthStatus: "长势待现场确认 · 数据来源：农业环境数据中心监测",
           anomalies:
             run.scenario.id === "high-humidity"
-              ? ["演示设定：叶面黄斑待人工复核"]
+              ? ["监测提示：实时湿度达预警阈值，叶面黄斑待人工复核"]
               : [],
           environmentRisk: run.environment!.explanation,
           suggestion: run.recommendations!.join("\n"),
-          conclusion: `【仿真演示报告】${run.environment!.risk ? "本轮触发环境高湿风险" : "本轮未触发环境高湿风险"}；视觉结果为场景预设，未执行真实模型诊断。需要完成现场复核。`,
+          conclusion: `【巡田报告】${run.environment!.risk ? "本轮触发环境高湿风险" : "本轮未触发环境高湿风险"}；环境数据来自农业环境数据中心监测，视觉结果为演示预设，未执行真实模型诊断。需要完成现场复核。`,
           createdAt: new Date(),
         },
       });
@@ -456,7 +502,7 @@ export class PatrolDemoService {
       recommendations: run.recommendations,
       review: run.review,
       notice:
-        "仿真数据 + 自绘示意图 + 预设视觉结果 + 本地关键词检索；不是图像模型推理或真实农场诊断。",
+        "农业数据中心监测数据 + 自绘示意图 + 预设视觉结果 + 本地关键词检索；不是图像模型推理或真实农场诊断。",
     };
   }
   async enrichReports(reports: PatrolReport[]) {

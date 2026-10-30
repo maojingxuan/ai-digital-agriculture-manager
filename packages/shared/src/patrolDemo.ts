@@ -29,7 +29,7 @@ export interface DemoEnvironmentEvidence {
   temperature: number;
   soilMoisture: number;
   risk: boolean;
-  source: "simulation";
+  source: "simulation" | "agriculture";
   explanation: string;
 }
 export interface DemoVisualEvidence {
@@ -69,6 +69,7 @@ export interface DemoReportEvidence {
 export interface DemoRun {
   id: string;
   userId: string;
+  greenhouseId: string;
   scenario: DemoScenario;
   humidity: number;
   threshold: number;
@@ -89,15 +90,14 @@ export interface DemoRun {
   review?: DemoReview;
 }
 export interface StartDemoInput {
-  scenarioId: DemoScenarioId;
-  humidity: number;
+  greenhouseId: string;
   threshold: number;
   requestKey: string;
 }
 export type DemoCommand = "pause" | "resume" | "cancel" | "retry";
 
 export const demoStepTitles: Record<DemoStepId, string> = {
-  observe: "读取仿真环境",
+  observe: "读取大棚监测数据",
   environment: "判断环境风险",
   vision: "查看叶片演示",
   knowledge: "检索本地知识",

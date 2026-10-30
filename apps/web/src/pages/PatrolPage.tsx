@@ -49,11 +49,11 @@ export function PatrolPage() {
           <form className="form-panel" onSubmit={handleSubmit}>
             <label>
               地块名称
-              <input name="plotName" placeholder="例如：1号番茄大棚" />
+              <input name="plotName" placeholder="例如：1号玉米示范田" />
             </label>
             <label>
               作物名称
-              <input name="cropName" placeholder="例如：番茄" />
+              <input name="cropName" placeholder="例如：玉米" />
             </label>
             <label>
               上传巡田图片

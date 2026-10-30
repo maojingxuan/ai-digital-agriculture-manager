@@ -10,11 +10,29 @@ const commandByDeviceType: Record<string, string[]> = {
 export class DeviceControlService {
   constructor(private readonly prisma: PrismaClient) {}
 
-  listDevices() {
-    return this.prisma.device.findMany({
+  async listDevices() {
+    const devices = await this.prisma.device.findMany({
       include: { greenhouse: { select: { id: true, name: true } } },
       orderBy: [{ greenhouse: { name: "asc" } }, { name: "asc" }]
     });
+
+    // 每个设备最近一次“开启”命令的时间
+    const latestOpened = await this.prisma.deviceCommand.findMany({
+      where: { command: { startsWith: "open_" }, executionStatus: "success" },
+      select: { deviceId: true, executedAt: true },
+      orderBy: { executedAt: "desc" }
+    });
+    const lastOpenedByDevice = new Map<string, Date>();
+    for (const record of latestOpened) {
+      if (record.executedAt && !lastOpenedByDevice.has(record.deviceId)) {
+        lastOpenedByDevice.set(record.deviceId, record.executedAt);
+      }
+    }
+
+    return devices.map((device) => ({
+      ...device,
+      lastOpenedAt: lastOpenedByDevice.get(device.id)?.toISOString() ?? null
+    }));
   }
 
   listCommands(limit = 50) {
@@ -46,6 +64,12 @@ export class DeviceControlService {
     if (!allowedCommands.includes(input.command)) {
       throw new Error("该命令与设备类型不匹配，已拒绝执行。");
     }
+    const opening = input.command.startsWith("open_");
+    const executedAt = new Date();
+    await this.prisma.device.update({
+      where: { id: device.id },
+      data: { running: opening, lastOnlineAt: executedAt }
+    });
     return this.prisma.deviceCommand.create({
       data: {
         deviceId: device.id,
@@ -57,7 +81,7 @@ export class DeviceControlService {
         },
         operator: input.operator.name,
         executionStatus: "success",
-        executedAt: new Date()
+        executedAt
       },
       include: { device: { include: { greenhouse: true } } }
     });

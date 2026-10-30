@@ -83,12 +83,18 @@ export interface SensorAnomaly {
   timestamp: string;
 }
 
+export interface AiRecommendation {
+  text: string;
+  /** 建议提出时间：有异常时对应来源异常的时间，无异常时为生成时刻 */
+  time: string;
+}
+
 export interface EnvironmentDashboard {
   greenhouse: GreenhouseSummary;
   realtime: AgricultureSnapshot;
   history: SensorHistorySeries[];
   anomalies: SensorAnomaly[];
-  recommendations: string[];
+  recommendations: AiRecommendation[];
 }
 
 export type GreenhouseStatus = "optimal" | "attention" | "warning";
@@ -159,6 +165,8 @@ export interface DeviceSummary {
   deviceType: string;
   status: string;
   lastOnlineAt?: string | null;
+  running: boolean;
+  lastOpenedAt?: string | null;
   greenhouse: { id: string; name: string };
 }
 
@@ -198,6 +206,21 @@ export interface KnowledgeDocumentSummary {
   };
 }
 
+export interface KnowledgeCategoryCount {
+  category: string;
+  count: number;
+}
+
+export interface KnowledgeDocumentPage {
+  items: KnowledgeDocumentSummary[];
+  total: number;
+  totalChunks: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  categories: KnowledgeCategoryCount[];
+}
+
 export interface KnowledgeChunkItem {
   id: string;
   documentId: string;
@@ -215,6 +238,8 @@ export interface KnowledgeSearchResult {
   documentTitle: string;
   category: string;
   content: string;
+  chunkIndex: number;
+  tokenCount: number;
   score: number;
 }
 

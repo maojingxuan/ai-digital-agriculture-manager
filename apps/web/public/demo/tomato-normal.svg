@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-labelledby="title desc">
-<title id="title">番茄叶片自绘示意图</title><desc id="desc">规则绘制的绿色叶片。不是实拍照片，不用于健康诊断。</desc>
+<title id="title">玉米叶片自绘示意图</title><desc id="desc">规则绘制的绿色叶片。不是实拍照片，不用于健康诊断。</desc>
 <defs><linearGradient id="leaf" x2="1" y2="1"><stop stop-color="#4d9c61"/><stop offset="1" stop-color="#236747"/></linearGradient></defs>
 <rect width="640" height="400" rx="24" fill="#edf4e9"/>
 <path d="M323 330 Q160 300 158 192 L185 183 177 151 213 155 218 117 257 130 280 91 310 112 332 74 Q445 143 472 225 L441 233 444 266 407 263 396 293 362 289Z" fill="url(#leaf)"/>

@@ -72,7 +72,7 @@ export class RetrievalService {
             // 同作物文档给予权重提振
             baseScore *= 1.35;
           } else if (chunkCrop && !queryCrops.includes(chunkCrop)) {
-            // 互斥作物文档施加强力抑制惩罚，杜绝“问黄瓜命中番茄”
+            // 互斥作物文档施加强力抑制惩罚，杜绝“问水稻命中玉米”
             baseScore *= 0.15;
           }
         }
@@ -86,6 +86,8 @@ export class RetrievalService {
           documentTitle: chunk.document.title,
           category: chunk.document.category,
           content: chunk.content,
+          chunkIndex: chunk.chunkIndex,
+          tokenCount: chunk.tokenCount,
           score: finalScore
         };
       })

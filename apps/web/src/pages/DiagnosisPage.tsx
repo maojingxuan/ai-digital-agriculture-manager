@@ -73,7 +73,7 @@ export function DiagnosisPage() {
           </span>
           <span className="engine-badge active">
             <Sparkles size={13} />
-            28类作物病虫害检测
+            沃柑 · 甘蔗 · 玉米病虫害检测
           </span>
         </div>
       </div>
@@ -84,14 +84,10 @@ export function DiagnosisPage() {
 
           <label>
             作物类型
-            <select name="cropType" defaultValue="番茄">
-              <option value="番茄">番茄 (Tomato)</option>
+            <select name="cropType" defaultValue="沃柑">
+              <option value="沃柑">沃柑 (Wogan Mandarin)</option>
+              <option value="甘蔗">甘蔗 (Sugarcane)</option>
               <option value="玉米">玉米 (Maize)</option>
-              <option value="水稻">水稻 (Rice)</option>
-              <option value="茶树">茶树 (Tea)</option>
-              <option value="黄瓜">黄瓜 (Cucumber)</option>
-              <option value="草莓">草莓 (Strawberry)</option>
-              <option value="其他">其他经济作物</option>
             </select>
           </label>
 

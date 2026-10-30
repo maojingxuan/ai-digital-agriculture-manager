@@ -49,27 +49,27 @@ async function ensureAuthUsers() {
 }
 const embeddingSize = 96;
 const agricultureLexicon = [
-  "番茄",
+  "玉米",
   "叶片",
   "黄褐色",
   "斑点",
   "病斑",
-  "叶斑病",
-  "早疫病",
-  "晚疫病",
-  "灰霉病",
-  "霜霉病",
+  "大斑病",
+  "小斑病",
+  "灰斑病",
+  "锈病",
   "虫害",
+  "玉米螟",
   "蚜虫",
-  "白粉虱",
-  "蓟马",
+  "草地贪夜蛾",
+  "粘虫",
   "温度",
   "湿度",
   "通风",
   "灌溉",
   "土壤",
   "光照",
-  "大棚",
+  "玉米田",
   "水肥",
   "农药",
   "施药",
@@ -227,7 +227,7 @@ async function main() {
 
   const greenhouse = await prisma.greenhouse.create({
     data: {
-      name: "1号番茄智慧大棚",
+      name: "1号玉米示范田",
       location: "智慧农业示范基地A区",
       area: 960,
       ownerId: user.id
@@ -236,7 +236,7 @@ async function main() {
 
   const nursery = await prisma.greenhouse.create({
     data: {
-      name: "2号草莓育苗大棚",
+      name: "2号玉米制种田",
       location: "智慧农业示范基地B区",
       area: 680,
       ownerId: user.id
@@ -322,9 +322,9 @@ async function main() {
   const crop = await prisma.crop.create({
     data: {
       greenhouseId: greenhouse.id,
-      name: "番茄",
-      variety: "粉果番茄",
-      growthStage: "坐果期",
+      name: "玉米",
+      variety: "鲜食玉米（甜糯 619）",
+      growthStage: "抽雄吐丝期",
       plantedAt: new Date("2026-07-20T00:00:00.000Z"),
       expectedHarvestAt: new Date("2026-10-05T00:00:00.000Z"),
       status: "growing"
@@ -335,14 +335,14 @@ async function main() {
     data: {
       userId: user.id,
       cropId: crop.id,
-      cropType: "番茄",
-      imageUrl: "/uploads/demo-tomato-leaf.jpg",
-      symptomDescription: "叶片出现褐色斑点，局部发黄。",
-      suspectedDisease: "疑似番茄叶斑病",
+      cropType: "玉米",
+      imageUrl: "/uploads/demo-corn-leaf.jpg",
+      symptomDescription: "下部叶片出现灰褐色梭形病斑，局部发黄。",
+      suspectedDisease: "疑似玉米大斑病",
       confidence: 0.82,
       riskLevel: "medium",
-      analysis: "叶片斑点与湿度偏高环境共同出现，需要关注病害扩散风险。",
-      suggestion: "建议加强通风，减少叶面湿度，并安排农技人员复核。",
+      analysis: "叶片病斑与湿度偏高环境共同出现，需要关注病害扩散风险。",
+      suggestion: "建议加强田间通风降湿，清除下部病叶，并安排农技人员复核。",
       reviewRequired: true
     }
   });
@@ -352,14 +352,14 @@ async function main() {
       userId: user.id,
       greenhouseId: greenhouse.id,
       cropId: crop.id,
-      plotName: "1号番茄智慧大棚",
-      cropName: "番茄",
+      plotName: "1号玉米示范田",
+      cropName: "玉米",
       imageUrl: "/uploads/demo-greenhouse.jpg",
       growthStatus: "整体长势稳定",
-      anomalies: ["局部叶色偏浅", "部分植株下部叶片有斑点"],
-      environmentRisk: "空气湿度偏高时可能增加叶部病害风险。",
-      suggestion: "建议上午通风降湿，并复查异常植株。",
-      conclusion: "当前地块整体可控，建议重点关注叶片斑点区域。"
+      anomalies: ["局部叶色偏浅", "下部叶片出现灰褐色病斑"],
+      environmentRisk: "空气湿度偏高时可能增加叶斑类病害风险。",
+      suggestion: "建议雨后及时排水降湿，并复查异常植株。",
+      conclusion: "当前地块整体可控，建议重点关注叶片病斑区域。"
     }
   });
 
@@ -371,7 +371,7 @@ async function main() {
       patrolRecordId: patrol.id,
       warningType: "disease_risk",
       level: "medium",
-      title: "番茄叶部病害风险",
+      title: "玉米叶部病害风险",
       content: "AI问诊与巡田记录均发现叶部异常，建议尽快复核。",
       status: "open"
     }
@@ -381,16 +381,16 @@ async function main() {
     data: {
       ownerId: user.id,
       cropId: crop.id,
-      name: "智慧大棚粉果番茄",
-      category: "蔬菜",
-      imageUrl: "/uploads/demo-product-tomato.jpg",
+      name: "智慧田鲜食玉米",
+      category: "粮食",
+      imageUrl: "/uploads/demo-product-corn.jpg",
       origin: "智慧农业示范基地A区",
-      specification: "5斤装",
-      price: 39.9,
+      specification: "5穗装",
+      price: 29.9,
       harvestTime: new Date("2026-09-07T06:00:00.000Z"),
-      cultivationMethod: "设施大棚绿色栽培",
-      description: "来自智慧大棚的粉果番茄，果形饱满，溯源记录完整。",
-      avatarScript: "大家好，我是AI数字农业管家。现在为你介绍智慧大棚粉果番茄，它来自示范基地A区，采摘新鲜，品质稳定。",
+      cultivationMethod: "旱作绿色栽培",
+      description: "来自智慧田的鲜食玉米，穗大粒饱，溯源记录完整。",
+      avatarScript: "大家好，我是AI数字农业管家。现在为你介绍智慧田鲜食玉米，它来自示范基地A区，采摘新鲜，品质稳定。",
       status: "active"
     }
   });
@@ -400,8 +400,8 @@ async function main() {
       {
         productId: product.id,
         traceType: "planting",
-        title: "定植记录",
-        content: "2026年7月20日完成番茄定植。",
+        title: "播种记录",
+        content: "2026年7月20日完成玉米播种。",
         occurredAt: new Date("2026-07-20T00:00:00.000Z")
       },
       {
@@ -496,13 +496,13 @@ async function main() {
   });
 
   await seedKnowledgeDocument({
-    title: "番茄常见叶部病害识别与检查",
+    title: "玉米常见叶部病害识别与检查",
     category: "病虫害知识",
     content: [
-      "番茄叶片出现黄褐色斑点时，应先检查病斑形态、发生部位和扩展速度。早疫病常见同心轮纹状褐色病斑，叶斑病常表现为边缘较清楚的小斑点，湿度较高时病斑可能扩大。",
-      "检查时要观察叶片正反面、下部老叶、叶缘和叶脉附近，记录是否有霉层、轮纹、穿孔、黄化晕圈，是否多株同时发生。",
-      "还需要结合棚内空气湿度、夜间结露、通风情况和近期浇水方式判断。湿度持续偏高、通风不足和叶面长时间潮湿，会提高叶部病害风险。",
-      "如果疑似病害扩散，应先隔离严重植株或摘除重病叶，并请当地农技人员复核。涉及农药和施药方案时，应严格遵循产品标签、当地植保建议和安全间隔期。"
+      "玉米叶片出现黄褐色或灰褐色病斑时，应先检查病斑形态、发生部位和扩展速度。大斑病常见梭形、灰褐色大型病斑，小斑病常表现为较小的椭圆形病斑，湿度较高时病斑可能扩大。",
+      "检查时要观察叶片正反面、下部老叶、叶缘和叶脉附近，记录是否有霉层、穿孔、黄化晕圈，是否多株同时发生。",
+      "还需要结合田间空气湿度、夜间结露、通风排涝情况和近期浇水方式判断。湿度持续偏高、通风不良和叶面长时间潮湿，会提高叶部病害风险。",
+      "如果疑似病害扩散，应先清除严重病株底叶，并请当地农技人员复核。涉及农药和施药方案时，应严格遵循产品标签、当地植保建议和安全间隔期。"
     ].join("\n\n")
   });
 
@@ -530,8 +530,8 @@ async function main() {
     title: "常见虫害巡查要点",
     category: "常见虫害",
     content: [
-      "大棚常见虫害包括蚜虫、白粉虱、蓟马和潜叶蝇。巡查时应重点查看叶片背面、嫩梢、花器和黄板诱虫情况。",
-      "虫害常伴随刺吸痕迹、叶片卷曲、银白色斑痕、蜜露或煤污。发现虫口密度上升时，应结合物理诱捕、生物防治和当地植保建议处理。",
+      "玉米田常见虫害包括玉米螟、蚜虫、草地贪夜蛾和粘虫。巡查时应重点查看心叶、叶片背面、雄穗和雌穗，以及茎秆蛀孔和排粪情况。",
+      "虫害常伴随叶片孔洞、窗纸状透斑、叶缘缺刻、茎秆蛀孔或果穗虫粪。发现虫口密度上升时，应结合物理诱捕、生物防治和当地植保建议处理。",
       "涉及药剂防治时必须注意轮换用药、防护和安全间隔期，避免残留风险。"
     ].join("\n\n")
   });

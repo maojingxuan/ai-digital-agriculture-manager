@@ -148,7 +148,7 @@ export class YoloDiagnosisService {
       "--output",
       outputAnnotatedPath,
       "--conf",
-      "0.18",
+      "0.10",
     ];
 
     try {
@@ -161,7 +161,7 @@ export class YoloDiagnosisService {
             PYTHONIOENCODING: "utf-8",
             YOLO_CONFIG_DIR: this.configDir,
           },
-          timeout: 45000,
+          timeout: 180000,
           windowsHide: true,
         },
       );
@@ -365,7 +365,7 @@ ${ragKnowledge ? `【农业知识库参考文献】：\n${ragKnowledge}` : ""}
       riskLevel,
       analysis,
       suggestion,
-      modelName: yoloResult?.modelName ?? "crop_disease_yolo11.pt",
+      modelName: yoloResult?.modelName ?? "corn_disease_best.pt",
       detections: yoloResult?.detections ?? [],
       ragReferences,
       visionError: inferenceError || undefined,

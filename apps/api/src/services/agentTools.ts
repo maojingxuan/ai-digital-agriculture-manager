@@ -40,7 +40,7 @@ const sensorTypes: SensorType[] = [
 ];
 
 function pickGreenhouseId(text?: string) {
-  if (text?.includes("2号") || text?.includes("草莓")) return "demo-gh-2";
+  if (text?.includes("2号") || text?.includes("制种")) return "demo-gh-2";
   return "demo-gh-1";
 }
 
@@ -149,7 +149,7 @@ export class AgentToolRegistry {
   private async diagnoseCropImage(
     parameters: Record<string, unknown>,
   ): Promise<ToolResult> {
-    const cropType = String(parameters.cropType ?? "番茄");
+    const cropType = String(parameters.cropType ?? "玉米");
     const symptom = String(
       parameters.symptomDescription ?? parameters.userRequest ?? "",
     );
@@ -158,8 +158,8 @@ export class AgentToolRegistry {
       ok: true,
       data: {
         cropType,
-        suspectedDisease: cropType.includes("番茄")
-          ? "疑似番茄叶斑类病害"
+        suspectedDisease: cropType.includes("玉米")
+          ? "疑似玉米叶斑类病害"
           : "疑似叶部病害",
         confidence: 0.76,
         riskLevel,
@@ -202,7 +202,7 @@ export class AgentToolRegistry {
         plotName: snapshot.farmName,
         cropName: String(
           parameters.cropName ??
-            (greenhouseId === "demo-gh-2" ? "草莓" : "番茄"),
+            (greenhouseId === "demo-gh-2" ? "玉米" : "玉米"),
         ),
         growthStatus: anomalies.some((item) => item.level === "risk")
           ? "局部环境风险偏高"
@@ -273,7 +273,7 @@ export class AgentToolRegistry {
   ): Promise<ToolResult> {
     const request = String(parameters.userRequest ?? parameters.command ?? "");
     const greenhouseKeyword =
-      request.includes("2号") || request.includes("草莓") ? "2号" : "1号";
+      request.includes("2号") || request.includes("制种") ? "2号" : "1号";
     const deviceType = String(
       parameters.deviceType ?? normalizeDeviceType(request),
     );

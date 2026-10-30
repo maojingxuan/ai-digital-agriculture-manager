@@ -52,15 +52,13 @@ function includesAny(text: string, keywords: string[]) {
 }
 
 function greenhouseIdFromText(text: string) {
-  return includesAny(text, ["2号", "草莓"]) ? "demo-gh-2" : "demo-gh-1";
+  return includesAny(text, ["2号", "制种"]) ? "demo-gh-2" : "demo-gh-1";
 }
 
 function cropFromText(text: string) {
-  if (text.includes("草莓")) return "草莓";
-  if (text.includes("黄瓜")) return "黄瓜";
   if (text.includes("玉米")) return "玉米";
   if (text.includes("水稻")) return "水稻";
-  return "番茄";
+  return "玉米";
 }
 
 function requestedSensors(text: string) {
@@ -299,7 +297,7 @@ export class ZhinongAgentService {
       };
     }
 
-    if (includesAny(text, ["商品", "农产品", "介绍", "溯源", "番茄卖"])) {
+    if (includesAny(text, ["商品", "农产品", "介绍", "溯源", "玉米卖"])) {
       return {
         intent: "product_query",
         needsData: true,

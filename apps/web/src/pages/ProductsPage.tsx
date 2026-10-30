@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import type { Product } from "@agri/shared";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Trash2 } from "lucide-react";
 import { api } from "../services/api";
 
 export function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     api
@@ -30,6 +31,34 @@ export function ProductsPage() {
     event.currentTarget.reset();
   }
 
+  function toggle(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected((current) => {
+      if (current.size === products.length) return new Set();
+      return new Set(products.map((product) => product.id));
+    });
+  }
+
+  async function handleDeleteSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) {
+      window.alert("请先在列表中勾选要删除的商品。");
+      return;
+    }
+    if (!window.confirm(`确定删除选中的 ${ids.length} 个商品吗？`)) return;
+    await api.deleteProducts(ids);
+    setProducts((current) => current.filter((product) => !selected.has(product.id)));
+    setSelected(new Set());
+  }
+
   return (
     <section className="page">
       <div className="page-header">
@@ -46,7 +75,7 @@ export function ProductsPage() {
         <form className="form-panel" onSubmit={handleSubmit}>
           <label>
             商品名称
-            <input name="name" required placeholder="例如：阳光草莓" />
+            <input name="name" required placeholder="例如：鲜食玉米" />
           </label>
           <label>
             商品品类
@@ -83,14 +112,46 @@ export function ProductsPage() {
         </form>
 
         <section className="list-panel">
-          <h2>商品列表</h2>
+          <div className="list-head">
+            <h2>商品列表</h2>
+            {products.length > 0 && (
+              <div className="list-toolbar">
+                <label className="select-all">
+                  <input
+                    type="checkbox"
+                    checked={selected.size === products.length}
+                    onChange={toggleAll}
+                  />
+                  全选
+                </label>
+                <button
+                  className="danger-button"
+                  onClick={handleDeleteSelected}
+                >
+                  <Trash2 size={15} />
+                  删除所选{selected.size > 0 ? `（${selected.size}）` : ""}
+                </button>
+              </div>
+            )}
+          </div>
           {products.length === 0 ? (
             <p className="muted">
               暂无商品，先创建一个用于数字人介绍的农产品。
             </p>
           ) : (
             products.map((product) => (
-              <article className="list-item" key={product.id}>
+              <article
+                className={`list-item ${selected.has(product.id) ? "is-selected" : ""}`}
+                key={product.id}
+              >
+                <label className="list-check">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(product.id)}
+                    onChange={() => toggle(product.id)}
+                    aria-label={`选择 ${product.name}`}
+                  />
+                </label>
                 <strong>{product.name}</strong>
                 <span>
                   {product.category} · {product.origin}

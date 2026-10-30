@@ -22,11 +22,12 @@ import { llmService } from "./services/llmService.js";
 import { YoloDiagnosisService } from "./services/yoloDiagnosisService.js";
 import { resolveApiPath } from "./config/paths.js";
 import { PersistenceService } from "./services/persistenceService.js";
-import { AuthenticationError, AuthService } from "./services/authService.js";
+import { AuthenticationError, AuthService, verifyPassword } from "./services/authService.js";
 import { createAuthenticate, requireAdmin } from "./middleware/auth.js";
 import { DeviceControlService } from "./services/deviceControlService.js";
 import { PatrolDemoService } from "./services/patrolDemoService.js";
 import { registerPatrolDemoRoutes } from "./routes/patrolDemoRoutes.js";
+import { ttsService } from "./services/ttsService.js";
 
 const app = express();
 const port = Number(process.env.API_PORT ?? 3001);
@@ -58,6 +59,23 @@ const id = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "AI数字农业管家 API", time: now() });
+});
+
+app.post("/api/tts", async (req, res) => {
+  const text = typeof req.body?.text === "string" ? req.body.text : "";
+  if (!text.trim()) {
+    res.status(400).json({ message: "text 不能为空" });
+    return;
+  }
+  try {
+    const mp3 = await ttsService.synthesize(text);
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Length", String(mp3.length));
+    res.send(mp3);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "TTS 合成失败";
+    res.status(502).json({ message });
+  }
 });
 
 app.post("/api/auth/login", async (req, res) => {
@@ -148,8 +166,52 @@ app.get("/api/llm/status", (_req, res) => {
   res.json(llmService.getStatus());
 });
 
-app.get("/api/greenhouses", (_req, res) => {
-  res.json(getGreenhouses());
+app.get("/api/greenhouses", async (_req, res) => {
+  const demo = getGreenhouses();
+  const custom = await persistenceService.listGreenhouses();
+  res.json([...demo, ...custom]);
+});
+
+async function verifyAdminPassword(userId: string, password: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { passwordHash: true }
+  });
+  if (!user?.passwordHash) return false;
+  return verifyPassword(password, user.passwordHash);
+}
+
+const createGreenhouseSchema = z.object({
+  name: z.string().min(1, "大棚名称不能为空"),
+  location: z.string().optional(),
+  area: z.number().optional(),
+  adminPassword: z.string().min(1, "请输入管理员密码")
+});
+
+app.post("/api/greenhouses", requireAdmin, async (req, res) => {
+  const { adminPassword, ...data } = createGreenhouseSchema.parse(req.body);
+  if (!(await verifyAdminPassword(req.auth!.id, adminPassword))) {
+    res.status(403).json({ message: "管理员密码错误，操作已取消。" });
+    return;
+  }
+  const greenhouse = await persistenceService.createGreenhouse(data, req.auth!.id);
+  res.status(201).json(greenhouse);
+});
+
+app.delete("/api/greenhouses/:id", requireAdmin, async (req, res) => {
+  const { adminPassword } = z
+    .object({ adminPassword: z.string().min(1, "请输入管理员密码") })
+    .parse(req.body ?? {});
+  if (!(await verifyAdminPassword(req.auth!.id, adminPassword))) {
+    res.status(403).json({ message: "管理员密码错误，操作已取消。" });
+    return;
+  }
+  const deleted = await persistenceService.deleteGreenhouse(String(req.params.id));
+  if (!deleted) {
+    res.status(404).json({ message: "大棚不存在或为系统内置大棚，无法删除。" });
+    return;
+  }
+  res.json({ success: true });
 });
 
 app.get("/api/sensors", (req, res) => {
@@ -178,8 +240,30 @@ app.get("/api/agriculture-data/current", (_req, res) => {
   res.json(getRealtimeSnapshot());
 });
 
-app.get("/api/knowledge/documents", async (_req, res) => {
-  res.json(await knowledgeService.listDocuments());
+app.get("/api/knowledge/documents", async (req, res) => {
+  const page = Number(req.query.page ?? 1);
+  const pageSize = Number(req.query.pageSize ?? 20);
+  const category = typeof req.query.category === "string" ? req.query.category : undefined;
+  const search = typeof req.query.search === "string" ? req.query.search : undefined;
+  // 高级检索参数：入库时间范围、来源类型、来源机构、排序
+  const dateFrom = typeof req.query.dateFrom === "string" ? req.query.dateFrom : undefined;
+  const dateTo = typeof req.query.dateTo === "string" ? req.query.dateTo : undefined;
+  const sourceType = typeof req.query.sourceType === "string" ? req.query.sourceType : undefined;
+  const source = typeof req.query.source === "string" ? req.query.source : undefined;
+  const sortBy = req.query.sortBy === "oldest" ? ("oldest" as const) : ("newest" as const);
+
+  const result = await knowledgeService.listDocuments({
+    page: Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1,
+    pageSize: Number.isFinite(pageSize) ? Math.min(100, Math.max(1, Math.floor(pageSize))) : 20,
+    category: category || undefined,
+    search: search || undefined,
+    dateFrom,
+    dateTo,
+    sourceType,
+    source,
+    sortBy
+  });
+  res.json(result);
 });
 
 app.get("/api/knowledge/documents/:id", async (req, res) => {
@@ -427,6 +511,27 @@ app.post("/api/products", async (req, res) => {
     res.status(201).json(await persistenceService.createProduct(parsed.data, req.auth!.id));
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : "农产品保存失败。" });
+  }
+});
+
+app.delete("/api/products", async (req, res) => {
+  const schema = z.object({ ids: z.array(z.string().min(1)).min(1) });
+  const parsed = schema.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ message: "请至少选择一个商品。" });
+    return;
+  }
+
+  try {
+    const deleted = await persistenceService.deleteProducts(
+      parsed.data.ids,
+      req.auth!.id,
+      req.auth!.role === "admin"
+    );
+    res.json({ deleted });
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : "商品删除失败。" });
   }
 });
 

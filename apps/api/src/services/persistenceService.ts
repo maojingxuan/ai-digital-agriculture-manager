@@ -6,7 +6,8 @@ import type {
   Product as PrismaProduct,
   ProductTrace
 } from "@prisma/client";
-import type { DiagnosisRecord, PatrolReport, Product, RiskLevel, YoloDetection } from "@agri/shared";
+import type { DiagnosisRecord, GreenhouseSummary, PatrolReport, Product, RiskLevel, YoloDetection } from "@agri/shared";
+import { getComprehensiveStatus } from "./sensorSimulator.js";
 
 export interface CreateProductInput {
   name: string;
@@ -242,5 +243,77 @@ export class PersistenceService {
       take: 200
     });
     return records.map(mapProduct);
+  }
+
+  async deleteProducts(ids: string[], ownerId: string, isAdmin: boolean): Promise<number> {
+    const productWhere = {
+      id: { in: ids },
+      ...(isAdmin ? {} : { ownerId })
+    };
+    // 先删除关联的溯源记录，避免外键约束冲突
+    await this.prisma.productTrace.deleteMany({
+      where: {
+        productId: { in: ids },
+        ...(isAdmin ? {} : { product: { ownerId } })
+      }
+    });
+    const result = await this.prisma.product.deleteMany({ where: productWhere });
+    return result.count;
+  }
+
+  async listGreenhouses(): Promise<GreenhouseSummary[]> {
+    const rows = await this.prisma.greenhouse.findMany({
+      where: { id: { not: { startsWith: "simulation-" } } },
+      select: { id: true, name: true, location: true, area: true },
+      orderBy: { createdAt: "asc" }
+    });
+    return rows.map((greenhouse) => ({
+      id: greenhouse.id,
+      name: greenhouse.name,
+      location: greenhouse.location ?? undefined,
+      area: greenhouse.area ?? undefined,
+      status: getComprehensiveStatus(greenhouse.id)
+    }));
+  }
+
+  async createGreenhouse(
+    input: { name: string; location?: string; area?: number },
+    ownerId: string
+  ): Promise<GreenhouseSummary> {
+    const created = await this.prisma.greenhouse.create({
+      data: {
+        name: input.name,
+        location: input.location ?? null,
+        area: input.area ?? null,
+        ownerId
+      }
+    });
+    return {
+      id: created.id,
+      name: created.name,
+      location: created.location ?? undefined,
+      area: created.area ?? undefined,
+      status: getComprehensiveStatus(created.id)
+    };
+  }
+
+  async deleteGreenhouse(id: string): Promise<boolean> {
+    try {
+      await this.prisma.$transaction([
+        this.prisma.deviceCommand.deleteMany({
+          where: { device: { greenhouseId: id } }
+        }),
+        this.prisma.device.deleteMany({ where: { greenhouseId: id } }),
+        this.prisma.sensorData.deleteMany({ where: { greenhouseId: id } }),
+        this.prisma.sensor.deleteMany({ where: { greenhouseId: id } }),
+        this.prisma.crop.deleteMany({ where: { greenhouseId: id } }),
+        this.prisma.warning.deleteMany({ where: { greenhouseId: id } }),
+        this.prisma.patrolRecord.deleteMany({ where: { greenhouseId: id } }),
+        this.prisma.greenhouse.delete({ where: { id } })
+      ]);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

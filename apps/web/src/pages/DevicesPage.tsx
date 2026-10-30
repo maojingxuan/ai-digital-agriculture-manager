@@ -10,6 +10,14 @@ const labels: Record<string, string> = {
   lighting: "补光灯"
 };
 
+function formatTime(value?: string | null) {
+  if (!value) return "暂无";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "暂无";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function commandFor(deviceType: string, open: boolean) {
   return `${open ? "open" : "close"}_${deviceType}`;
 }
@@ -41,12 +49,23 @@ export function DevicesPage() {
 
   async function execute(device: DeviceSummary, open: boolean) {
     const action = open ? "开启" : "关闭";
-    if (!confirm(`确认${action}“${device.name}”吗？该操作会写入设备审计日志。`)) return;
+    // 开启/关闭设备均无需二次确认，直接下发指令。
     setBusyId(device.id);
     setMessage("");
     try {
       const record = await api.controlDevice(device.id, commandFor(device.deviceType, open));
       setCommands((current) => [record, ...current]);
+      setDevices((current) =>
+        current.map((item) =>
+          item.id === device.id
+            ? {
+                ...item,
+                running: record.device.running,
+                lastOpenedAt: open ? (record.executedAt ?? new Date().toISOString()) : item.lastOpenedAt
+              }
+            : item
+        )
+      );
       setMessage(`${device.name}已${action}，命令记录已保存。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "设备控制失败。");
@@ -84,9 +103,12 @@ export function DevicesPage() {
               <div className="device-card-title">
                 <span className="device-icon"><Power size={18} /></span>
                 <div><strong>{device.name}</strong><small>{labels[device.deviceType] ?? device.deviceType}</small></div>
-                <span className="role-badge user">{device.status}</span>
+                <span className={`role-badge ${device.running ? "running" : "stopped"}`}>
+                  {device.running ? "设备正在运行" : "已停止"}
+                </span>
               </div>
               <p>{device.greenhouse.name}</p>
+              <small>最近开启时间：{formatTime(device.lastOpenedAt)}</small>
               <small>最近命令：{latest?.command ?? "暂无记录"}</small>
               {isAdmin && (
                 <div className="device-actions">

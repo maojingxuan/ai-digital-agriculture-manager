@@ -9,6 +9,7 @@ import type {
   SensorHistorySeries,
   SensorSummary,
   KnowledgeChunkItem,
+  KnowledgeDocumentPage,
   KnowledgeDocumentSummary,
   KnowledgeSearchResult,
   LlmStatus,
@@ -81,7 +82,23 @@ export const api = {
     }),
   getAgricultureData: () =>
     request<AgricultureSnapshot>("/agriculture-data/current"),
-  listGreenhouses: () => request<GreenhouseSummary[]>("/greenhouses"),
+  listGreenhouses: (signal?: AbortSignal) =>
+    request<GreenhouseSummary[]>("/greenhouses", { signal }),
+  createGreenhouse: (data: {
+    name: string;
+    location?: string;
+    area?: number;
+    adminPassword: string;
+  }) =>
+    request<GreenhouseSummary>("/greenhouses", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteGreenhouse: (id: string, adminPassword: string) =>
+    request<{ success: boolean }>(`/greenhouses/${id}`, {
+      method: "DELETE",
+      body: JSON.stringify({ adminPassword }),
+    }),
   listSensors: (greenhouseId: string) =>
     request<SensorSummary[]>(`/sensors?greenhouseId=${greenhouseId}`),
   getRealtimeSensorData: (greenhouseId: string) =>
@@ -163,6 +180,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  deleteProducts: (ids: string[]) =>
+    request<{ deleted: number }>("/products", {
+      method: "DELETE",
+      body: JSON.stringify({ ids }),
+    }),
   listDevices: () => request<DeviceSummary[]>("/devices"),
   listDeviceCommands: () => request<DeviceCommandSummary[]>("/device-commands"),
   controlDevice: (deviceId: string, command: string) =>
@@ -170,8 +192,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ command, confirmExecution: true }),
     }),
-  listKnowledgeDocuments: () =>
-    request<KnowledgeDocumentSummary[]>("/knowledge/documents"),
+  listKnowledgeDocuments: (params?: {
+    page?: number;
+    pageSize?: number;
+    category?: string;
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    sourceType?: string;
+    source?: string;
+    sortBy?: "newest" | "oldest";
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set("page", String(params.page));
+    if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+    if (params?.category) query.set("category", params.category);
+    if (params?.search) query.set("search", params.search);
+    if (params?.dateFrom) query.set("dateFrom", params.dateFrom);
+    if (params?.dateTo) query.set("dateTo", params.dateTo);
+    if (params?.sourceType) query.set("sourceType", params.sourceType);
+    if (params?.source) query.set("source", params.source);
+    if (params?.sortBy) query.set("sortBy", params.sortBy);
+    const qs = query.toString();
+    return request<KnowledgeDocumentPage>(
+      `/knowledge/documents${qs ? `?${qs}` : ""}`,
+    );
+  },
   getKnowledgeDocumentDetail: (id: string) =>
     request<KnowledgeDocumentSummary & { chunks: KnowledgeChunkItem[] }>(
       `/knowledge/documents/${id}`,
@@ -203,4 +249,21 @@ export const api = {
     ),
   getLlmStatus: (signal?: AbortSignal) =>
     request<LlmStatus>("/llm/status", { signal }),
+  synthesizeSpeech: async (text: string): Promise<Blob> => {
+    const token = authToken.get();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await fetch(`${apiBaseUrl}/tts`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ text }),
+    });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as {
+        message?: string;
+      } | null;
+      throw new Error(body?.message ?? `TTS 请求失败：${response.status}`);
+    }
+    return response.blob();
+  },
 };

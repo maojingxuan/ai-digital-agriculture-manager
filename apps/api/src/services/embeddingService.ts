@@ -1,18 +1,7 @@
 const embeddingSize = 96;
 
 export const majorCrops = [
-  "黄瓜",
-  "番茄",
-  "草莓",
-  "水稻",
   "玉米",
-  "辣椒",
-  "茄子",
-  "西瓜",
-  "甜瓜",
-  "葡萄",
-  "芹菜",
-  "白菜"
 ];
 
 const agricultureLexicon = [

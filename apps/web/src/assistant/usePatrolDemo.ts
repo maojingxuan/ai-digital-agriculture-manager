@@ -1,18 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  DemoCommand,
-  DemoRun,
-  DemoScenario,
-  DemoScenarioId,
-} from "@agri/shared";
+import type { DemoCommand, DemoRun, GreenhouseSummary } from "@agri/shared";
 import { api } from "../services/api";
 
 export function usePatrolDemo() {
-  const [scenarios, setScenarios] = useState<DemoScenario[]>([]);
-  const [run, setRun] = useState<DemoRun | null>(null);
-  const [scenarioId, setScenarioId] = useState<DemoScenarioId>("high-humidity");
-  const [humidity, setHumidity] = useState(91);
+  const [greenhouses, setGreenhouses] = useState<GreenhouseSummary[]>([]);
+  const [greenhouseId, setGreenhouseId] = useState("");
   const [threshold, setThreshold] = useState(85);
+  const [run, setRun] = useState<DemoRun | null>(null);
   const [loading, setLoading] = useState(true);
   const [operating, setOperating] = useState(false);
   const [error, setError] = useState("");
@@ -36,11 +30,12 @@ export function usePatrolDemo() {
     setError("");
     try {
       const [list, latest] = await Promise.all([
-        api.getDemoScenarios(controller.signal),
+        api.listGreenhouses(controller.signal),
         api.getCurrentDemo(controller.signal),
       ]);
       if (!mounted.current || revision !== version.current) return;
-      setScenarios(list);
+      setGreenhouses(list);
+      setGreenhouseId((current) => current || list[0]?.id || "");
       apply(latest);
     } catch (err) {
       if (mounted.current && revision === version.current)
@@ -134,19 +129,20 @@ export function usePatrolDemo() {
   );
   const start = useCallback(async () => {
     if (
-      runRef.current &&
-      !["complete", "cancelled"].includes(runRef.current.status)
+      !greenhouseId ||
+      (runRef.current &&
+        !["complete", "cancelled"].includes(runRef.current.status))
     )
       return;
     // Retain the same key when the response is lost: resending must not create a second job.
     keyRef.current ??= crypto.randomUUID();
     await perform((signal) =>
       api.startDemo(
-        { scenarioId, humidity, threshold, requestKey: keyRef.current! },
+        { greenhouseId, threshold, requestKey: keyRef.current! },
         signal,
       ),
     );
-  }, [perform, scenarioId, humidity, threshold]);
+  }, [perform, greenhouseId, threshold]);
   const command = useCallback(
     async (command: DemoCommand) => {
       const current = runRef.current;
@@ -165,8 +161,7 @@ export function usePatrolDemo() {
     ++version.current;
     keyRef.current = null;
     apply(null);
-    setScenarioId("high-humidity");
-    setHumidity(91);
+    setGreenhouseId((current) => current || "");
     setThreshold(85);
     setError("");
     setPollError("");
@@ -175,23 +170,17 @@ export function usePatrolDemo() {
     const current = runRef.current;
     if (current) await perform((signal) => api.reviewDemo(current.id, signal));
   }, [perform]);
-  const chooseScenario = (id: DemoScenarioId) => {
+  const chooseGreenhouse = (id: string) => {
     if (runRef.current || operation.current) return;
-    setScenarioId(id);
-    setHumidity(
-      scenarios.find((item) => item.id === id)?.humidity ??
-        (id === "normal" ? 68 : 91),
-    );
+    setGreenhouseId(id);
   };
   return {
-    scenarios,
-    run,
-    scenarioId,
-    chooseScenario,
-    humidity,
-    setHumidity,
+    greenhouses,
+    greenhouseId,
+    chooseGreenhouse,
     threshold,
     setThreshold,
+    run,
     loading,
     operating,
     error,

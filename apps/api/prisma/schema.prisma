@@ -259,6 +259,7 @@ model Device {
   name         String
   deviceType   String          @map("device_type")
   status       String          @default("online")
+  running      Boolean         @default(false) @map("running_state")
   lastOnlineAt DateTime?       @map("last_online_at")
   createdAt    DateTime        @default(now()) @map("created_at")
   updatedAt    DateTime        @updatedAt @map("updated_at")

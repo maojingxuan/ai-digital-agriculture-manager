@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
-import { demoScenarios } from "../services/patrolDemoKnowledge.js";
+import { getGreenhouses } from "../services/sensorSimulator.js";
 import { DemoError, PatrolDemoService } from "../services/patrolDemoService.js";
 
 export function registerPatrolDemoRoutes(
@@ -33,9 +33,9 @@ export function registerPatrolDemoRoutes(
       }
     };
   app.get(
-    "/api/patrol-demo/scenarios",
+    "/api/patrol-demo/greenhouses",
     wrap(async (_req, res) => {
-      res.json(demoScenarios);
+      res.json(getGreenhouses());
     }),
   );
   app.get(
@@ -55,8 +55,7 @@ export function registerPatrolDemoRoutes(
     wrap(async (req, res) => {
       const parsed = z
         .object({
-          scenarioId: z.enum(["normal", "high-humidity"]),
-          humidity: z.number().min(0).max(100),
+          greenhouseId: z.string().min(1, "请选择大棚"),
           threshold: z.number().min(70).max(95),
           requestKey: z
             .string()
@@ -67,7 +66,7 @@ export function registerPatrolDemoRoutes(
         .safeParse(req.body);
       if (!parsed.success)
         throw new DemoError(
-          "请输入有效场景、湿度（0～100%）、阈值（70～95%）和请求标识。",
+          "请选择有效大棚、预警阈值（70～95%）和请求标识。",
           400,
         );
       res.status(201).json(await service.start(parsed.data, req.auth!));

@@ -44,11 +44,8 @@ export function SettingsPage() {
         </label>
         <label>
           默认作物
-          <select defaultValue="番茄">
-            <option>番茄</option>
-            <option>黄瓜</option>
-            <option>草莓</option>
-            <option>水稻</option>
+          <select defaultValue="玉米">
+            <option>玉米</option>
           </select>
         </label>
         <label className="checkbox-row">

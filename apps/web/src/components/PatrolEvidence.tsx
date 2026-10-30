@@ -13,7 +13,7 @@ export function PatrolEvidence({
         <section
           className={`demo-proof ${evidence.environment.risk ? "is-risk" : ""}`}
         >
-          <h3>环境证据 · 仿真计算</h3>
+          <h3>环境证据 · 农业数据中心监测</h3>
           <div className="demo-metrics">
             <span>
               湿度 <strong>{evidence.environment.humidity}%</strong>
@@ -22,13 +22,16 @@ export function PatrolEvidence({
               温度 <strong>{evidence.environment.temperature}℃</strong>
             </span>
             <span>
+              土壤湿度 <strong>{evidence.environment.soilMoisture}%</strong>
+            </span>
+            <span>
               阈值 <strong>{evidence.environment.threshold}%</strong>
             </span>
           </div>
           <p>{evidence.environment.explanation}</p>
           {evidence.environment.threshold !== 85 && (
             <small>
-              当前为用户调整的演示阈值；资料中的85%不是万能安全边界。
+              当前为用户调整的预警阈值；资料中的85%不是万能安全边界。
             </small>
           )}
         </section>
