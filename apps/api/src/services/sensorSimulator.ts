@@ -322,7 +322,10 @@ export function getRealtimeSnapshot(greenhouseId?: string, date = new Date()): A
 
 export function getHistory(greenhouseId?: string, hours = 24, intervalMinutes = 60, date = new Date()): SensorHistorySeries[] {
   const greenhouse = getProfile(greenhouseId);
-  const steps = Math.max(1, Math.floor((hours * 60) / intervalMinutes));
+  // 纵深防御：即使绕过路由层直接传参，也把 hours 钳制在 1~720，防止生成超大点数
+  const numeric = Number(hours);
+  const safeHours = Number.isFinite(numeric) ? Math.min(720, Math.max(1, Math.floor(numeric))) : 24;
+  const steps = Math.max(1, Math.floor((safeHours * 60) / intervalMinutes));
 
   return sensorTypes.map((sensorType) => {
     const definition = sensorDefinitions[sensorType];

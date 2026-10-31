@@ -198,6 +198,13 @@ app.delete("/api/greenhouses/:id", requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
+// 解析 sensor-data 的 hours 参数：合法范围 1~720 小时（30 天），非有限数字回退默认 24
+function parseHours(raw: unknown, fallback = 24, min = 1, max = 720): number {
+  const n = Number(raw ?? fallback);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(n)));
+}
+
 app.get("/api/sensors", (req, res) => {
   res.json(getSensors(String(req.query.greenhouseId ?? "")));
 });
@@ -207,13 +214,11 @@ app.get("/api/sensor-data/realtime", (req, res) => {
 });
 
 app.get("/api/sensor-data/history", (req, res) => {
-  const hours = Number(req.query.hours ?? 24);
-  res.json(getHistory(String(req.query.greenhouseId ?? ""), Number.isFinite(hours) ? hours : 24));
+  res.json(getHistory(String(req.query.greenhouseId ?? ""), parseHours(req.query.hours)));
 });
 
 app.get("/api/sensor-data/anomalies", (req, res) => {
-  const hours = Number(req.query.hours ?? 24);
-  res.json(getAnomalies(String(req.query.greenhouseId ?? ""), Number.isFinite(hours) ? hours : 24));
+  res.json(getAnomalies(String(req.query.greenhouseId ?? ""), parseHours(req.query.hours)));
 });
 
 app.get("/api/dashboard/environment", (req, res) => {
