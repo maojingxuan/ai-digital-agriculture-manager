@@ -50,7 +50,28 @@ const agentTools = new AgentToolRegistry(prisma, retrievalService);
 const zhinongAgent = new ZhinongAgentService(prisma, agentTools);
 const loginAttempts = new Map<string, { failures: number; blockedUntil: number }>();
 
-app.use(cors());
+// CORS 白名单：仅允许前端开发服务器（Vite 5173）及通过 CORS_ALLOWED_ORIGINS 环境变量追加的来源
+const allowedOrigins = new Set([
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  ...(process.env.CORS_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+]);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // 无 Origin：同源请求、curl/脚本等非浏览器客户端不受 CORS 约束 → 放行
+      if (!origin) return callback(null, true);
+      // 白名单内 → 附加 Access-Control-Allow-Origin
+      if (allowedOrigins.has(origin)) return callback(null, true);
+      // 白名单外 → 不附加 ACAO 头，由浏览器拦截；服务端正常处理
+      return callback(null, false);
+    }
+  })
+);
 app.use(express.json());
 app.use("/uploads", express.static(uploadDir));
 app.use("/api/uploads", express.static(uploadDir));
