@@ -125,6 +125,11 @@ model DiseaseDiagnosis {
   detections         Json?
   ragReferences      Json?            @map("rag_references")
   visionError        String?          @map("vision_error")
+  sourceType         String?          @map("source_type")
+  videoUrl           String?          @map("video_url")
+  framesAnalyzed     Int?             @map("frames_analyzed")
+  frameCount         Int?             @map("frame_count")
+  keyFrames          Json?            @map("key_frames")
   reviewRequired     Boolean          @default(false) @map("review_required")
   createdAt          DateTime         @default(now()) @map("created_at")
   user               User             @relation(fields: [userId], references: [id])

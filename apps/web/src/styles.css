@@ -1,7 +1,8 @@
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   color: #121c17;
-  background: #f6f9f8;
+  --site-bg: linear-gradient(rgba(246, 249, 248, 0.84), rgba(246, 249, 248, 0.84)), url("/backgrounds/corn-bg.jpg") center/cover no-repeat fixed;
+  background: var(--site-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -39,7 +40,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #f6f9f8;
+  background: var(--site-bg);
 }
 
 button,
@@ -57,7 +58,7 @@ button {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
   min-height: 100vh;
-  background: #f6f9f8;
+  background: var(--site-bg);
 }
 
 .sidebar {
@@ -243,6 +244,7 @@ h2 {
 .avatar-panel,
 .chat-panel,
 .form-panel,
+.camera-panel,
 .result-panel,
 .list-panel,
 .metric-card {
@@ -758,13 +760,14 @@ textarea {
 }
 
 .diagnosis-layout {
-  align-items: start;
+  align-items: stretch;
 }
 
 .diagnosis-layout .form-panel {
   display: flex;
   flex-direction: column;
-  height: 660px;
+  height: auto;
+  min-height: 560px;
   box-sizing: border-box;
   overflow-y: auto;
 }
@@ -772,7 +775,8 @@ textarea {
 .diagnosis-result-card {
   display: flex;
   flex-direction: column;
-  height: 660px;
+  height: auto;
+  min-height: 560px;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -2649,7 +2653,7 @@ textarea {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: radial-gradient(circle at 20% 10%, #eaf5dc, transparent 34%), #f4f7f1;
+  background: var(--site-bg);
 }
 
 .login-card {
@@ -3240,4 +3244,305 @@ textarea {
 @keyframes mic-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(217, 54, 54, 0.45); }
   50% { box-shadow: 0 0 0 8px rgba(217, 54, 54, 0); }
+}
+
+/* ============ 摄像头实拍诊断 ============ */
+.diagnosis-left-col {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 20px;
+  align-content: stretch;
+  min-height: 0;
+}
+
+.camera-panel {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  box-sizing: border-box;
+}
+
+.camera-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.camera-panel-header h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.camera-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.camera-badge.on {
+  background: var(--green-soft);
+  color: var(--green-strong);
+}
+
+.camera-preview-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: #0d1a10;
+  border: 1px solid var(--line);
+  aspect-ratio: 16 / 9;
+}
+
+.camera-preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.camera-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 13px;
+  text-align: center;
+  padding: 16px;
+}
+
+.rec-indicator {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff4d4f;
+  animation: rec-blink 1s ease-in-out infinite;
+}
+
+@keyframes rec-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.camera-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.camera-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-secondary);
+  padding: 8px 13px;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.camera-btn:hover:not(:disabled) {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.camera-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.camera-btn.primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+.camera-btn.primary:hover:not(:disabled) {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+}
+
+.camera-btn.recording {
+  background: #d93636;
+  border-color: #d93636;
+  color: #fff;
+  animation: rec-btn-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes rec-btn-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 54, 54, 0.45); }
+  50% { box-shadow: 0 0 0 8px rgba(217, 54, 54, 0); }
+}
+
+.camera-device-select {
+  flex: 1;
+  min-width: 150px;
+  max-width: 280px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-secondary);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.camera-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.camera-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.camera-note {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* ============ 视频关键帧分析结果 ============ */
+.video-keyframes-section {
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-alt);
+}
+
+.keyframes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.keyframes-header h4 {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.keyframes-summary {
+  margin: 8px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.keyframes-summary strong {
+  color: var(--green-strong);
+}
+
+.keyframes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.keyframe-card {
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-subtle);
+}
+
+.keyframe-img-wrap {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #0d1a10;
+}
+
+.keyframe-img-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.keyframe-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(38, 138, 86, 0.9);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.keyframe-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+}
+
+.keyframe-time {
+  color: var(--muted);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+.keyframe-disease {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.keyframe-conf {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-mono);
 }

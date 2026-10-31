@@ -2,7 +2,12 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { DiagnosisRecord, YoloDetection } from "@agri/shared";
+import type {
+  DiagnosisRecord,
+  VideoDiagnosisRecord,
+  VideoKeyFrame,
+  YoloDetection,
+} from "@agri/shared";
 import type { RetrievalService } from "./retrievalService.js";
 import type { LlmService } from "./llmService.js";
 import {
@@ -10,6 +15,7 @@ import {
   projectRootDir,
   yoloModelPath,
   yoloScriptPath,
+  yoloVideoScriptPath,
 } from "../config/paths.js";
 
 const execFileAsync = promisify(execFile);
@@ -42,8 +48,43 @@ export interface YoloRawOutput {
   error?: string;
 }
 
+export interface VideoKeyFrameRaw {
+  index: number;
+  timeSec: number;
+  imagePath: string;
+  annotatedPath?: string | null;
+  detectionsCount: number;
+  topDisease: string;
+  confidence: number;
+  riskLevel: "low" | "medium" | "high";
+}
+
+export type VideoDetection = YoloDetection & {
+  frameIndex?: number;
+  timeSec?: number;
+};
+
+export interface VideoRawOutput {
+  success: boolean;
+  detected: boolean;
+  modelName: string;
+  videoName: string;
+  framesAnalyzed: number;
+  frameCount: number;
+  fps?: number;
+  keyFrames: VideoKeyFrameRaw[];
+  detections: VideoDetection[];
+  detectionsCount: number;
+  topDisease: string;
+  confidence: number;
+  riskLevel: "low" | "medium" | "high";
+  annotatedSaved: boolean;
+  error?: string;
+}
+
 export class YoloDiagnosisService {
   private readonly scriptPath: string;
+  private readonly videoScriptPath: string;
   private readonly modelPath: string;
   private readonly configDir: string;
   private pythonCommand?: Promise<PythonCommand>;
@@ -64,6 +105,12 @@ export class YoloDiagnosisService {
           "scripts/yolo_inference.py",
         )
       : yoloScriptPath;
+    this.videoScriptPath = process.env.YOLO_VIDEO_SCRIPT_PATH?.trim()
+      ? resolveApiPath(
+          process.env.YOLO_VIDEO_SCRIPT_PATH,
+          "scripts/yolo_video_diagnosis.py",
+        )
+      : yoloVideoScriptPath;
     this.configDir = resolveApiPath(
       process.env.YOLO_CONFIG_DIR,
       ".ultralytics",
@@ -205,6 +252,96 @@ export class YoloDiagnosisService {
       }
 
       console.error("[YOLO Inference Error]", error);
+      throw error;
+    }
+  }
+
+  async runVideoInference(
+    videoPath: string,
+    outputDir: string,
+    maxFrames = 6,
+  ): Promise<VideoRawOutput> {
+    if (!fs.existsSync(this.modelPath)) {
+      throw new Error(`未找到 YOLO 农业模型权重: ${this.modelPath}`);
+    }
+
+    if (!fs.existsSync(this.videoScriptPath)) {
+      throw new Error(`未找到 YOLO 视频推理脚本: ${this.videoScriptPath}`);
+    }
+
+    fs.mkdirSync(this.configDir, { recursive: true });
+
+    this.pythonCommand ??= this.findPython();
+    const python = await this.pythonCommand;
+
+    const args = [
+      this.videoScriptPath,
+      "--video",
+      videoPath,
+      "--model",
+      this.modelPath,
+      "--output-dir",
+      outputDir,
+      "--conf",
+      "0.10",
+      "--max-frames",
+      String(maxFrames),
+    ];
+
+    try {
+      const { stdout, stderr } = await execFileAsync(
+        python.executable,
+        [...python.prefixArgs, ...args],
+        {
+          env: {
+            ...process.env,
+            PYTHONIOENCODING: "utf-8",
+            YOLO_CONFIG_DIR: this.configDir,
+          },
+          timeout: 300000,
+          windowsHide: true,
+        },
+      );
+
+      const match = stdout.match(
+        /__YOLO_RESULT_START__\s*([\s\S]*?)\s*__YOLO_RESULT_END__/,
+      );
+      if (!match || !match[1]) {
+        throw new Error(`YOLO 视频脚本返回结果格式异常: ${stdout || stderr}`);
+      }
+
+      const parsed = JSON.parse(match[1]) as VideoRawOutput;
+      if (!parsed.success) {
+        throw new Error(parsed.error || "YOLO 视频推理执行失败");
+      }
+
+      return parsed;
+    } catch (error) {
+      const stdout =
+        typeof error === "object" && error !== null && "stdout" in error
+          ? String((error as { stdout?: unknown }).stdout ?? "")
+          : "";
+      const match = stdout.match(
+        /__YOLO_RESULT_START__\s*([\s\S]*?)\s*__YOLO_RESULT_END__/,
+      );
+      if (match?.[1]) {
+        try {
+          const parsed = JSON.parse(match[1]) as VideoRawOutput;
+          if (parsed.error) {
+            throw new Error(`YOLO 视频推理失败：${parsed.error}`);
+          }
+        } catch (parsedError) {
+          if (
+            parsedError instanceof Error &&
+            parsedError.message.startsWith("YOLO 视频推理失败：")
+          ) {
+            console.error("[YOLO Video Inference Error]", parsedError.message);
+            throw parsedError;
+          }
+        }
+      }
+
+      console.error("[YOLO Video Inference Error]", error);
       throw error;
     }
   }
@@ -367,6 +504,192 @@ ${ragKnowledge ? `【农业知识库参考文献】：\n${ragKnowledge}` : ""}
       suggestion,
       modelName: yoloResult?.modelName ?? "corn_disease_best.pt",
       detections: yoloResult?.detections ?? [],
+      ragReferences,
+      visionError: inferenceError || undefined,
+      createdAt: now(),
+    };
+  }
+
+  async diagnoseVideo(options: {
+    videoFile?: Express.Multer.File;
+    cropType: string;
+    symptomDescription?: string;
+  }): Promise<VideoDiagnosisRecord> {
+    const { videoFile, cropType, symptomDescription } = options;
+    const now = () => new Date().toISOString();
+    const id = `diag_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+
+    // 未上传视频时基于文本返回引导信息
+    if (!videoFile) {
+      return {
+        id,
+        cropType,
+        symptomDescription,
+        sourceType: "video",
+        suspectedDisease: "待上传作物视频",
+        confidence: 0,
+        riskLevel: "low",
+        analysis:
+          "未提供作物视频，请使用摄像头拍摄或上传玉米生长视频，以激活关键帧 YOLO 视觉诊断。",
+        suggestion:
+          "建议拍摄玉米叶片正反面及茎秆 5~10 秒短视频，光线充足、画面平稳，以便模型抽取清晰关键帧。",
+        createdAt: now(),
+      };
+    }
+
+    const uploadDir = path.dirname(videoFile.path);
+    const videoIdBase = videoFile.filename;
+    const framesDir = path.join(uploadDir, `${videoIdBase}_frames`);
+    const urlPrefix = `/uploads/${videoIdBase}_frames`;
+
+    let yoloResult: VideoRawOutput | null = null;
+    let inferenceError = "";
+
+    try {
+      yoloResult = await this.runVideoInference(videoFile.path, framesDir);
+    } catch (err) {
+      inferenceError = err instanceof Error ? err.message : String(err);
+      console.warn(
+        "[YoloDiagnosisService] Video fallback due to inference error:",
+        inferenceError,
+      );
+    }
+
+    const visionFailed = Boolean(inferenceError);
+    const detected = yoloResult?.detected ?? false;
+    const topDisease = visionFailed
+      ? "YOLO 视频关键帧识别失败"
+      : (yoloResult?.topDisease ??
+        (detected ? "未知病害" : "未见明显侵染病斑"));
+    const confidence = yoloResult?.confidence ?? 0;
+    const riskLevel =
+      yoloResult?.riskLevel ??
+      (symptomDescription?.includes("严重") ? "high" : "medium");
+
+    const keyFrames: VideoKeyFrame[] = (yoloResult?.keyFrames ?? []).map(
+      (kf) => ({
+        index: kf.index,
+        timeSec: kf.timeSec,
+        imageUrl: `${urlPrefix}/${path.basename(kf.imagePath)}`,
+        annotatedUrl: kf.annotatedPath
+          ? `${urlPrefix}/${path.basename(kf.annotatedPath)}`
+          : undefined,
+        detectionsCount: kf.detectionsCount,
+        topDisease: kf.topDisease,
+        confidence: kf.confidence,
+      }),
+    );
+    const firstAnnotated = keyFrames.find((k) => k.annotatedUrl);
+    const annotatedImageUrl = firstAnnotated?.annotatedUrl;
+
+    // 联动 RAG 农业知识库
+    let ragKnowledge = "";
+    let ragReferences: string[] = [];
+    if (this.retrievalService) {
+      const queryText =
+        `${cropType} ${topDisease} ${symptomDescription ?? ""}`.trim();
+      const ragAnswer = await this.retrievalService.answer(queryText, {
+        topK: 3,
+        minScore: 0.16,
+      });
+      if (ragAnswer.reliable) {
+        ragKnowledge = ragAnswer.answer;
+        ragReferences = ragAnswer.results.map((c) => c.documentTitle);
+      }
+    }
+
+    // 联动 LLM 生成专家级综合处方
+    let analysis = "";
+    let suggestion = "";
+
+    if (this.llm?.isConfigured() && detected) {
+      try {
+        const prompt = `你是一名资深设施农业病虫害诊断专家。
+【视频关键帧检测结果】：
+- 深度视觉模型：Ultralytics YOLOv11 农业视觉模型
+- 检测目标作物：${cropType}
+- 视频共抽取关键帧：${yoloResult?.framesAnalyzed || 0} 帧 / 视频总帧数 ${yoloResult?.frameCount || 0}
+- 跨帧聚合检出核心病害：${topDisease}（置信度：${(confidence * 100).toFixed(1)}%）
+- 用户补充症状：${symptomDescription || "无"}
+- 检出病害类别数：${yoloResult?.detectionsCount || 0} 类
+${ragKnowledge ? `【农业知识库参考文献】：\n${ragKnowledge}` : ""}
+
+请输出专业、结构化、分条理的农技问诊报告：
+1. **【病害诊断与病因分析】**：明确指出病原体类型（真菌/细菌/病毒/害虫/生理障碍）与典型表型；
+2. **【当前风险与环境诱因】**：分析大棚温湿度对该病害发展的影响；
+3. **【科学防治处方】**：
+   - 物理与农艺措施（通风、控水、摘除病叶等）；
+   - 针对性药剂推荐（给出有效成分通用名，严禁杜撰，给出科学稀释倍数与安全间隔期）。
+格式要求：Markdown 分段、加粗关键药剂与操作，行文严谨专业。`;
+
+        const fullReply = await this.llm.chat([
+          {
+            role: "system",
+            content: "你是专业的AI数字农业管家与作物病理专家。",
+          },
+          { role: "user", content: prompt },
+        ]);
+
+        const splitIndex =
+          fullReply.indexOf("3.") !== -1
+            ? fullReply.indexOf("3.")
+            : fullReply.indexOf("【科学防治处方】");
+
+        if (splitIndex !== -1) {
+          analysis = fullReply.slice(0, splitIndex).trim();
+          suggestion = fullReply.slice(splitIndex).trim();
+        } else {
+          analysis = fullReply;
+          suggestion =
+            "建议遵循绿色防控方针，优先物理降湿通风，严重时对症施药。";
+        }
+      } catch (llmErr) {
+        console.warn(
+          "[YoloDiagnosisService] LLM prescription failed (video), falling back:",
+          llmErr,
+        );
+      }
+    }
+
+    // 兜底结构化生成（无大模型或调用超时）
+    if (!analysis || !suggestion) {
+      if (visionFailed) {
+        analysis = `本次视频未完成 YOLO 关键帧识别，不能据此判断作物是否健康。\n\n运行错误：${inferenceError}`;
+        suggestion =
+          "请检查 Python、Ultralytics 和模型运行环境，修复后重新上传视频诊断。";
+      } else if (detected) {
+        const topDet = yoloResult?.detections[0];
+        analysis = `对上传视频抽取 **${yoloResult?.framesAnalyzed ?? 0} 个关键帧**完成 YOLO 逐帧检测，跨帧聚合检出 **${topDisease}**（置信度：**${(confidence * 100).toFixed(1)}%**），共识别 **${yoloResult?.detectionsCount ?? 0} 类**病害目标。\n\n主要病害分类：**${topDet?.category ?? "侵染性病害"}**。\n病理特征说明：${topDet?.description ?? "病斑在叶面扩展，需密切留意扩散趋势。"}`;
+
+        suggestion = `1. **隔离与清理**：立即摘除已发病的病叶、病果，带出棚外深埋或销毁，防止气流二次传播；\n2. **环境调控**：加强大棚通风排湿，傍晚停止喷灌，避免叶片表面形成凝露水膜；\n3. **对症施药**：建议选用对症保护性与治疗性杀菌剂交替喷施，注意叶片正反面均匀着药。`;
+        if (ragKnowledge) {
+          suggestion += `\n\n**知识库用药参考**：\n${ragKnowledge}`;
+        }
+      } else {
+        analysis = `对上传视频抽取 ${yoloResult?.framesAnalyzed ?? 0} 个关键帧完成 YOLO 逐帧扫描，各帧叶片整体长势稳定，未检出明显的溃疡斑点、霜霉病层或钻蛀性害虫（或病斑处于极早期微弱阶段）。`;
+        suggestion =
+          "建议继续保持大棚标准水肥管理，注意观察昼夜温差与叶面湿度变化；若后续叶片出现明显褪绿变黄斑块，可重新拍摄视频复检。";
+      }
+    }
+
+    return {
+      id,
+      cropType,
+      symptomDescription,
+      sourceType: "video",
+      imageUrl: keyFrames[0]?.imageUrl ?? `/uploads/${videoFile.filename}`,
+      videoUrl: `/uploads/${videoFile.filename}`,
+      annotatedImageUrl,
+      suspectedDisease: topDisease,
+      confidence: Math.round(confidence * 1000) / 1000,
+      riskLevel,
+      analysis,
+      suggestion,
+      modelName: yoloResult?.modelName ?? "corn_disease_best.pt",
+      detections: yoloResult?.detections ?? [],
+      framesAnalyzed: yoloResult?.framesAnalyzed,
+      frameCount: yoloResult?.frameCount,
+      keyFrames,
       ragReferences,
       visionError: inferenceError || undefined,
       createdAt: now(),

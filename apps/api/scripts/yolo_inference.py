@@ -293,12 +293,90 @@ DISEASE_TRANSLATIONS = {
     }
 }
 
+def infer_image(model, image_path, output_path, conf=0.10):
+    """Run YOLO detection on a single image with the given (already loaded) model.
+
+    Returns the per-image result dict without the modelName field; both the
+    photo endpoint and the video key-frame pipeline reuse this function.
+    """
+    import cv2
+    from PIL import Image
+
+    # Open with PIL Image to support extensionless uploads from multer
+    pil_img = Image.open(image_path)
+    if pil_img.mode != 'RGB':
+        pil_img = pil_img.convert('RGB')
+
+    results = model.predict(source=pil_img, conf=conf, verbose=False)
+
+    detections = []
+    annotated_saved = False
+    if len(results) > 0 and len(results[0].boxes) > 0:
+        boxes = results[0].boxes
+        for box in boxes:
+            cls_id = int(box.cls[0].item())
+            label_en = model.names.get(cls_id, f"Class_{cls_id}")
+            conf = float(box.conf[0].item())
+            xyxy = [round(float(c), 1) for c in box.xyxy[0].tolist()]
+
+            info = DISEASE_TRANSLATIONS.get(label_en, {
+                "nameZh": label_en,
+                "crop": "未知作物",
+                "riskLevel": "medium",
+                "category": "未知分类",
+                "description": "未收录分类"
+            })
+
+            detections.append({
+                "classId": cls_id,
+                "labelEn": label_en,
+                "labelZh": info["nameZh"],
+                "crop": info["crop"],
+                "category": info["category"],
+                "riskLevel": info["riskLevel"],
+                "description": info["description"],
+                "confidence": round(conf, 4),
+                "box": xyxy
+            })
+
+        detections.sort(key=lambda x: x["confidence"], reverse=True)
+
+        annotated_frame = results[0].plot()
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        cv2.imwrite(output_path, annotated_frame)
+        annotated_saved = True
+
+    if detections:
+        top_detection = detections[0]
+        detected = True
+        top_disease = top_detection["labelZh"]
+        top_confidence = top_detection["confidence"]
+        overall_risk = "high" if any(d["riskLevel"] == "high" for d in detections) else top_detection["riskLevel"]
+    else:
+        detected = False
+        top_disease = "未检出显著病害或处于健康状态"
+        top_confidence = 0.0
+        overall_risk = "low"
+
+    return {
+        "success": True,
+        "detected": detected,
+        "detectionsCount": len(detections),
+        "detections": detections,
+        "topDisease": top_disease,
+        "confidence": top_confidence,
+        "riskLevel": overall_risk,
+        "annotatedSaved": annotated_saved,
+        "annotatedPath": os.path.abspath(output_path) if annotated_saved else None
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="YOLO Crop Disease Inference")
     parser.add_argument("--image", required=True, help="Path to input crop leaf image")
     parser.add_argument("--model", required=True, help="Path to YOLO model .pt file")
     parser.add_argument("--output", required=True, help="Path to save annotated image")
-    parser.add_argument("--conf", type=float, default=0.20, help="Confidence threshold")
+    parser.add_argument("--conf", type=float, default=0.10, help="Confidence threshold")
     args = parser.parse_args()
 
     if not os.path.exists(args.image):
@@ -311,80 +389,10 @@ def main():
 
     try:
         from ultralytics import YOLO
-        import cv2
-        from PIL import Image
 
         model = YOLO(args.model)
-
-        # Open with PIL Image to support extensionless uploads from multer
-        pil_img = Image.open(args.image)
-        if pil_img.mode != 'RGB':
-            pil_img = pil_img.convert('RGB')
-
-        results = model.predict(source=pil_img, conf=args.conf, verbose=False)
-
-        detections = []
-        if len(results) > 0 and len(results[0].boxes) > 0:
-            boxes = results[0].boxes
-            for box in boxes:
-                cls_id = int(box.cls[0].item())
-                label_en = model.names.get(cls_id, f"Class_{cls_id}")
-                conf = float(box.conf[0].item())
-                xyxy = [round(float(c), 1) for c in box.xyxy[0].tolist()]
-
-                info = DISEASE_TRANSLATIONS.get(label_en, {
-                    "nameZh": label_en,
-                    "crop": "未知作物",
-                    "riskLevel": "medium",
-                    "category": "未知分类",
-                    "description": "未收录分类"
-                })
-
-                detections.append({
-                    "classId": cls_id,
-                    "labelEn": label_en,
-                    "labelZh": info["nameZh"],
-                    "crop": info["crop"],
-                    "category": info["category"],
-                    "riskLevel": info["riskLevel"],
-                    "description": info["description"],
-                    "confidence": round(conf, 4),
-                    "box": xyxy
-                })
-
-            detections.sort(key=lambda x: x["confidence"], reverse=True)
-
-            annotated_frame = results[0].plot()
-            os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
-            cv2.imwrite(args.output, annotated_frame)
-            annotated_saved = True
-        else:
-            annotated_saved = False
-
-        if detections:
-            top_detection = detections[0]
-            detected = True
-            top_disease = top_detection["labelZh"]
-            top_confidence = top_detection["confidence"]
-            overall_risk = "high" if any(d["riskLevel"] == "high" for d in detections) else top_detection["riskLevel"]
-        else:
-            detected = False
-            top_disease = "未检出显著病害或处于健康状态"
-            top_confidence = 0.0
-            overall_risk = "low"
-
-        response = {
-            "success": True,
-            "detected": detected,
-            "modelName": os.path.basename(args.model),
-            "detectionsCount": len(detections),
-            "detections": detections,
-            "topDisease": top_disease,
-            "confidence": top_confidence,
-            "riskLevel": overall_risk,
-            "annotatedSaved": annotated_saved,
-            "annotatedPath": os.path.abspath(args.output) if annotated_saved else None
-        }
+        result = infer_image(model, args.image, args.output, args.conf)
+        response = {**result, "modelName": os.path.basename(args.model)}
 
         print("__YOLO_RESULT_START__")
         print(json.dumps(response, ensure_ascii=False))

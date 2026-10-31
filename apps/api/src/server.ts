@@ -1,6 +1,7 @@
 import "./config/env.js";
 import cors from "cors";
 import fs from "node:fs";
+import path from "node:path";
 import express from "express";
 import multer from "multer";
 import type { Prisma } from "@prisma/client";
@@ -59,23 +60,6 @@ const id = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "AI数字农业管家 API", time: now() });
-});
-
-app.post("/api/tts", async (req, res) => {
-  const text = typeof req.body?.text === "string" ? req.body.text : "";
-  if (!text.trim()) {
-    res.status(400).json({ message: "text 不能为空" });
-    return;
-  }
-  try {
-    const mp3 = await ttsService.synthesize(text);
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.setHeader("Content-Length", String(mp3.length));
-    res.send(mp3);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "TTS 合成失败";
-    res.status(502).json({ message });
-  }
 });
 
 app.post("/api/auth/login", async (req, res) => {
@@ -458,6 +442,37 @@ app.get("/api/diagnosis", async (req, res) => {
   res.json(await persistenceService.listDiagnoses(req.auth!.id, req.auth!.role === "admin"));
 });
 
+app.post("/api/diagnosis/video", upload.single("video"), async (req, res) => {
+  const cropType = String(req.body.cropType ?? "未知作物");
+  const symptomDescription = req.body.symptomDescription ? String(req.body.symptomDescription) : undefined;
+
+  try {
+    // multer 默认存为无扩展名文件，补回原始扩展名，保证原始视频可在线播放
+    if (req.file) {
+      const originalExt = (req.file.originalname.match(/\.([a-zA-Z0-9]+)$/)?.[1] ?? "").toLowerCase();
+      if (originalExt) {
+        const target = `${req.file.path}.${originalExt}`;
+        fs.renameSync(req.file.path, target);
+        req.file.path = target;
+        req.file.filename = `${req.file.filename}.${originalExt}`;
+      }
+    }
+
+    const record = await yoloDiagnosisService.diagnoseVideo({
+      videoFile: req.file,
+      cropType,
+      symptomDescription
+    });
+
+    res.json(await persistenceService.saveDiagnosis(record, req.auth!.id));
+  } catch (error) {
+    console.error("[Video Diagnosis Error]", error);
+    res.status(500).json({
+      message: error instanceof Error ? error.message : "视频诊断失败，请检查模型与服务状态。"
+    });
+  }
+});
+
 app.post("/api/patrols", upload.single("image"), async (req, res) => {
   try {
     const report = await persistenceService.createPatrol({
@@ -532,6 +547,24 @@ app.delete("/api/products", async (req, res) => {
     res.json({ deleted });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : "商品删除失败。" });
+  }
+});
+
+app.post("/api/tts", async (req, res) => {
+  const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+  if (!text) {
+    res.status(400).json({ message: "请提供要合成的文本。" });
+    return;
+  }
+  try {
+    const wav = await ttsService.synthesize(text.slice(0, 500));
+    res.setHeader("Content-Type", "audio/wav");
+    res.send(wav);
+  } catch (error) {
+    console.error("[TTS Error]", error);
+    res.status(500).json({
+      message: error instanceof Error ? error.message : "离线语音合成失败。"
+    });
   }
 });
 

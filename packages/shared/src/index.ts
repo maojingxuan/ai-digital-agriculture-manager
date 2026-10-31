@@ -129,6 +129,26 @@ export interface DiagnosisRecord {
   createdAt: string;
 }
 
+/** 视频关键帧诊断：单个被抽取的关键帧及其逐帧检测摘要 */
+export interface VideoKeyFrame {
+  index: number;
+  timeSec: number;
+  imageUrl?: string;
+  annotatedUrl?: string;
+  detectionsCount: number;
+  topDisease: string;
+  confidence: number;
+}
+
+/** 视频关键帧诊断记录：摄像头拍摄的视频经过关键帧抽取 + YOLO 逐帧识别 */
+export interface VideoDiagnosisRecord extends DiagnosisRecord {
+  sourceType: "video";
+  videoUrl?: string;
+  framesAnalyzed?: number;
+  frameCount?: number;
+  keyFrames?: VideoKeyFrame[];
+}
+
 export interface PatrolReport {
   id: string;
   plotName: string;

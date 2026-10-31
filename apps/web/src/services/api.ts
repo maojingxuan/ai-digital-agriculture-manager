@@ -21,6 +21,7 @@ import type {
   DemoScenario,
   DemoCommand,
   StartDemoInput,
+  VideoDiagnosisRecord,
 } from "@agri/shared";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api";
@@ -130,6 +131,11 @@ export const api = {
     }),
   createDiagnosis: (formData: FormData) =>
     request<DiagnosisRecord>("/diagnosis", {
+      method: "POST",
+      body: formData,
+    }),
+  diagnoseVideo: (formData: FormData) =>
+    request<VideoDiagnosisRecord>("/diagnosis/video", {
       method: "POST",
       body: formData,
     }),
@@ -249,21 +255,22 @@ export const api = {
     ),
   getLlmStatus: (signal?: AbortSignal) =>
     request<LlmStatus>("/llm/status", { signal }),
+
+  /** 离线 TTS：返回 wav Blob */
   synthesizeSpeech: async (text: string): Promise<Blob> => {
+    const headers = new Headers();
     const token = authToken.get();
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const response = await fetch(`${apiBaseUrl}/tts`, {
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    headers.set("Content-Type", "application/json");
+    const resp = await fetch(`${apiBaseUrl}/tts`, {
       method: "POST",
       headers,
       body: JSON.stringify({ text }),
     });
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as {
-        message?: string;
-      } | null;
-      throw new Error(body?.message ?? `TTS 请求失败：${response.status}`);
+    if (!resp.ok) {
+      const body = (await resp.json().catch(() => null)) as { message?: string } | null;
+      throw new Error(body?.message ?? `语音合成失败：${resp.status}`);
     }
-    return response.blob();
+    return resp.blob();
   },
 };

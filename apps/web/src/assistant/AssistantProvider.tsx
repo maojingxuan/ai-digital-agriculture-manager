@@ -152,82 +152,82 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     setCameraRevision((current) => current + 1);
   }, []);
   const stopSpeech = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.onended = null;
-      audioRef.current.onerror = null;
-      audioRef.current.onplay = null;
-      audioRef.current.removeAttribute("src");
-      audioRef.current.load();
-      audioRef.current = null;
-    }
+    speakSeqRef.current++;
     speechRef.current = null;
     window.speechSynthesis?.cancel();
+    if (audioRef.current) {
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
     setSpeaking(false);
   }, []);
-  // 回退：浏览器本地 TTS
-  const speakLocal = useCallback(
-    (text: string) => {
-      if (!("speechSynthesis" in window)) return;
-      const speech = new SpeechSynthesisUtterance(text);
-      speech.lang = "zh-CN";
-      speech.rate = 1.05;
-      const allVoices = window.speechSynthesis.getVoices();
-      const chosen = voiceName
-        ? allVoices.find((v) => v.name === voiceName)
-        : undefined;
-      if (chosen) {
-        speech.voice = chosen;
-        speech.lang = chosen.lang || "zh-CN";
-      }
-      speech.onstart = () => {
-        if (speechRef.current === speech) setSpeaking(true);
-      };
-      const finish = () => {
-        if (speechRef.current !== speech || !mountedRef.current) return;
-        speechRef.current = null;
-        setSpeaking(false);
-      };
-      speech.onend = finish;
-      speech.onerror = finish;
-      speechRef.current = speech;
-      window.speechSynthesis.speak(speech);
-    },
-    [voiceName],
-  );
   const speakText = useCallback(
-    async (rawText: string) => {
-      if (!rawText.trim()) return;
+    (rawText: string) => {
+      const text = rawText.replace(/[#*_`>]/g, "").trim();
+      if (!text) return;
       stopSpeech();
       const seq = ++speakSeqRef.current;
-      const text = rawText.replace(/[#*_`>]/g, "");
-      // 1) 优先走豆包 TTS
-      try {
-        const blob = await api.synthesizeSpeech(text);
-        // 期间如果又有新的播报请求，丢弃这次过期的结果
-        if (!mountedRef.current || speakSeqRef.current !== seq) return;
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio.loop = false;
-        audioRef.current = audio;
-        audio.onplay = () => setSpeaking(true);
-        const finish = () => {
-          if (audioRef.current !== audio) return;
-          audioRef.current = null;
-          setSpeaking(false);
-          URL.revokeObjectURL(url);
+
+      // 优先用后端离线 TTS（sherpa-onnx）
+      api
+        .synthesizeSpeech(text)
+        .then((blob) => {
+          if (!mountedRef.current || seq !== speakSeqRef.current) return;
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audioRef.current = audio;
+          audio.onended = () => {
+            if (seq !== speakSeqRef.current) return;
+            audioRef.current = null;
+            URL.revokeObjectURL(url);
+            setSpeaking(false);
+          };
+          audio.onerror = () => {
+            if (seq !== speakSeqRef.current) return;
+            audioRef.current = null;
+            URL.revokeObjectURL(url);
+            setSpeaking(false);
+            fallbackSpeak(text, seq);
+          };
+          setSpeaking(true);
+          audio.play().catch(() => fallbackSpeak(text, seq));
+        })
+        .catch(() => {
+          if (!mountedRef.current || seq !== speakSeqRef.current) return;
+          fallbackSpeak(text, seq);
+        });
+
+      function fallbackSpeak(t: string, s: number) {
+        if (!("speechSynthesis" in window)) return;
+        const speech = new SpeechSynthesisUtterance(t);
+        speech.lang = "zh-CN";
+        speech.rate = 1.05;
+        const allVoices = window.speechSynthesis.getVoices();
+        const chosen = voiceName
+          ? allVoices.find((v) => v.name === voiceName)
+          : undefined;
+        if (chosen) {
+          speech.voice = chosen;
+          speech.lang = chosen.lang || "zh-CN";
+        }
+        speech.onstart = () => {
+          if (s === speakSeqRef.current) setSpeaking(true);
         };
-        audio.onended = finish;
-        audio.onerror = finish;
-        await audio.play();
-        return;
-      } catch {
-        // 2) 豆包失败，回退浏览器本地 TTS
-        if (!mountedRef.current || speakSeqRef.current !== seq) return;
-        speakLocal(text);
+        const finish = () => {
+          if (s !== speakSeqRef.current || !mountedRef.current) return;
+          speechRef.current = null;
+          setSpeaking(false);
+        };
+        speech.onend = finish;
+        speech.onerror = finish;
+        speechRef.current = speech;
+        window.speechSynthesis.speak(speech);
       }
     },
-    [stopSpeech, speakLocal],
+    [stopSpeech, voiceName],
   );
   const sendMessage = useCallback(
     async (content = input) => {
@@ -326,12 +326,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
   const speakLastReply = useCallback(() => {
-    if (
-      !("speechSynthesis" in window) ||
-      requestRef.current ||
-      patrolActiveRef.current
-    )
-      return;
+    if (requestRef.current || patrolActiveRef.current) return;
+    // 正在播放（豆包 audio 或浏览器 TTS）就停止，否则重新播
     if (speechRef.current) {
       stopSpeech();
       return;

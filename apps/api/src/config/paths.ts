@@ -9,6 +9,7 @@ export const rootEnvPath = path.join(projectRootDir, ".env");
 export const apiEnvPath = path.join(apiRootDir, ".env");
 export const yoloModelPath = path.join(apiRootDir, "models", "crop_disease_yolo11.pt");
 export const yoloScriptPath = path.join(apiRootDir, "scripts", "yolo_inference.py");
+export const yoloVideoScriptPath = path.join(apiRootDir, "scripts", "yolo_video_diagnosis.py");
 
 export function resolveApiPath(configuredPath: string | undefined, fallbackRelativePath: string): string {
   const value = configuredPath?.trim();

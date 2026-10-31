@@ -6,7 +6,7 @@ import type {
   Product as PrismaProduct,
   ProductTrace
 } from "@prisma/client";
-import type { DiagnosisRecord, GreenhouseSummary, PatrolReport, Product, RiskLevel, YoloDetection } from "@agri/shared";
+import type { DiagnosisRecord, GreenhouseSummary, PatrolReport, Product, RiskLevel, VideoDiagnosisRecord, VideoKeyFrame, YoloDetection } from "@agri/shared";
 import { getComprehensiveStatus } from "./sensorSimulator.js";
 
 export interface CreateProductInput {
@@ -56,7 +56,16 @@ const toDetections = (value: Prisma.JsonValue | null): YoloDetection[] | undefin
   return value as unknown as YoloDetection[];
 };
 
-const mapDiagnosis = (record: DiseaseDiagnosis): DiagnosisRecord => ({
+const toKeyFrames = (value: Prisma.JsonValue | null): VideoKeyFrame[] | undefined => {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  return value as unknown as VideoKeyFrame[];
+};
+
+const mapDiagnosis = (
+  record: DiseaseDiagnosis,
+): DiagnosisRecord & Partial<VideoDiagnosisRecord> => ({
   id: record.id,
   cropType: record.cropType,
   symptomDescription: optionalText(record.symptomDescription),
@@ -71,6 +80,11 @@ const mapDiagnosis = (record: DiseaseDiagnosis): DiagnosisRecord => ({
   detections: toDetections(record.detections),
   ragReferences: toStringArray(record.ragReferences),
   visionError: optionalText(record.visionError),
+  sourceType: record.sourceType === "video" ? "video" : undefined,
+  videoUrl: optionalText(record.videoUrl),
+  framesAnalyzed: record.framesAnalyzed ?? undefined,
+  frameCount: record.frameCount ?? undefined,
+  keyFrames: toKeyFrames(record.keyFrames),
   createdAt: record.createdAt.toISOString()
 });
 
@@ -120,7 +134,10 @@ export class PersistenceService {
     return crops.find((crop) => name.includes(crop.name) || category.includes(crop.name));
   }
 
-  async saveDiagnosis(record: DiagnosisRecord, userId: string): Promise<DiagnosisRecord> {
+  async saveDiagnosis(
+    record: DiagnosisRecord & Partial<VideoDiagnosisRecord>,
+    userId: string,
+  ): Promise<DiagnosisRecord> {
     const crop = await this.findCrop(record.cropType);
     const saved = await this.prisma.diseaseDiagnosis.create({
       data: {
@@ -140,6 +157,11 @@ export class PersistenceService {
         detections: record.detections as unknown as Prisma.InputJsonValue | undefined,
         ragReferences: record.ragReferences as Prisma.InputJsonValue | undefined,
         visionError: record.visionError,
+        sourceType: record.sourceType,
+        videoUrl: record.videoUrl,
+        framesAnalyzed: record.framesAnalyzed,
+        frameCount: record.frameCount,
+        keyFrames: record.keyFrames as unknown as Prisma.InputJsonValue | undefined,
         reviewRequired: Boolean(record.visionError) || record.confidence < 0.5,
         createdAt: new Date(record.createdAt)
       }

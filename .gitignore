@@ -21,3 +21,4 @@ yarn-error.log*
 pnpm-debug.log*
 *.local
 *.log
+apps/api/models/tts-zh-ll/

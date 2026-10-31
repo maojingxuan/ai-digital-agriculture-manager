@@ -1,100 +1,63 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import fs from "node:fs";
+import path from "node:path";
+import { projectRootDir } from "../config/paths.js";
+
+const execFileAsync = promisify(execFile);
+
 /**
- * 豆包语音合成（火山引擎 TTS v3 unidirectional，新版控制台）
- * 接收文本，返回 mp3 Buffer。
+ * sherpa-onnx 离线 TTS。
+ * 每次请求写一个临时 UTF-8 文本文件，spawn Python 合成 wav，读完即删。
+ * 模型每次加载约 2-3 秒，完全离线、无外部依赖。
  */
-const TTS_ENDPOINT =
-  "https://openspeech.bytedance.com/api/v3/tts/unidirectional";
+export class SherpaTtsService {
+  private pythonExec: string;
+  private scriptPath: string;
+  private tmpDir: string;
 
-function uuid(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
-
-export class TtsService {
-  private readonly apiKey = process.env.TTS_ACCESS_TOKEN ?? "";
-  private readonly speaker =
-    process.env.TTS_SPEAKER ?? "zh_female_vv_uranus_bigtts";
-  private readonly resourceId = process.env.TTS_RESOURCE_ID ?? "seed-tts-2.0";
-
-  get configured() {
-    return Boolean(this.apiKey);
+  constructor() {
+    this.pythonExec =
+      process.env.PYTHON_EXEC?.trim() ||
+      "E:\\Conda\\miniconda3\\envs\\work\\python.exe";
+    this.scriptPath = path.join(
+      projectRootDir,
+      "apps",
+      "api",
+      "scripts",
+      "sherpa_tts_once.py",
+    );
+    this.tmpDir = path.join(projectRootDir, "apps", "api", "tmp");
+    fs.mkdirSync(this.tmpDir, { recursive: true });
   }
 
   async synthesize(text: string): Promise<Buffer> {
-    if (!this.configured) {
-      throw new Error("TTS 未配置：缺少 TTS_ACCESS_TOKEN");
-    }
-    const trimmed = text.trim();
-    if (!trimmed) return Buffer.alloc(0);
+    const trimmed = text.trim().slice(0, 500);
+    if (!trimmed) throw new Error("合成文本为空");
 
-    const body = {
-      req_params: {
-        text: trimmed,
-        speaker: this.speaker,
-        audio_params: {
-          format: "mp3",
-          sample_rate: 24000,
+    const id = `${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+    const txtFile = path.join(this.tmpDir, `tts_${id}.txt`);
+    const wavFile = path.join(this.tmpDir, `tts_${id}.wav`);
+    fs.writeFileSync(txtFile, trimmed, "utf-8");
+
+    try {
+      const { stdout, stderr } = await execFileAsync(
+        this.pythonExec,
+        [this.scriptPath, txtFile, wavFile],
+        {
+          env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+          timeout: 30000,
+          windowsHide: true,
+          maxBuffer: 1024 * 1024,
         },
-      },
-    };
-
-    const res = await fetch(TTS_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Api-Key": this.apiKey,
-        "X-Api-Resource-Id": this.resourceId,
-        "X-Api-Request-Id": uuid(),
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!res.ok || !res.body) {
-      const errText = await res.text().catch(() => "");
-      throw new Error(`TTS 服务返回 ${res.status}: ${errText.slice(0, 300)}`);
+      );
+      if (stderr) console.error("[TTS py stderr]", stderr);
+      return fs.readFileSync(wavFile);
+    } finally {
+      fs.promises.unlink(txtFile).catch(() => undefined);
+      fs.promises.unlink(wavFile).catch(() => undefined);
     }
-
-    // v3 unidirectional 返回 NDJSON，每行一个 JSON 片段，data 字段是 base64 mp3
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    const chunks: Buffer[] = [];
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let idx: number;
-      while ((idx = buffer.indexOf("\n")) >= 0) {
-        const line = buffer.slice(0, idx).trim();
-        buffer = buffer.slice(idx + 1);
-        if (!line) continue;
-        try {
-          const json = JSON.parse(line);
-          // code=0 是音频包；code=20000000 是流式结束的成功信号；
-          // 其他非 0 code 才是真错误
-          if (json.code && json.code !== 0 && json.code !== 20000000) {
-            throw new Error(
-              `TTS 错误 code=${json.code}: ${json.message ?? ""}`,
-            );
-          }
-          if (json.data) {
-            chunks.push(Buffer.from(json.data, "base64"));
-          }
-        } catch (e) {
-          if (e instanceof Error && e.message.startsWith("TTS 错误")) throw e;
-        }
-      }
-    }
-    if (chunks.length === 0) {
-      throw new Error("TTS 未返回音频数据");
-    }
-    return Buffer.concat(chunks);
   }
 }
 
-export const ttsService = new TtsService();
+export const ttsService = new SherpaTtsService();
