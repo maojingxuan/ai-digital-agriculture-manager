@@ -401,3 +401,19 @@ model KnowledgeRetrievalLog {
   @@index([createdAt])
   @@map("knowledge_retrieval_logs")
 }
+
+model SecurityEvent {
+  id         String   @id @default(cuid())
+  eventType  String   @map("event_type")
+  identifier String
+  userId     String?  @map("user_id")
+  ipAddress  String?  @map("ip_address")
+  success    Boolean
+  detail     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([eventType])
+  @@index([identifier])
+  @@index([createdAt])
+  @@map("security_events")
+}

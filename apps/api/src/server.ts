@@ -152,6 +152,31 @@ app.use("/api/uploads", mediaGate, express.static(uploadDir));
 const now = () => new Date().toISOString();
 const id = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
 
+// 安全审计：登录/注册/改密等认证事件落库（90 天保留，管理员可查）
+async function logSecurityEvent(event: {
+  eventType: string;
+  identifier: string;
+  userId?: string | null;
+  ip?: string;
+  success: boolean;
+  detail?: string;
+}) {
+  try {
+    await prisma.securityEvent.create({
+      data: {
+        eventType: event.eventType,
+        identifier: event.identifier.slice(0, 200),
+        userId: event.userId ?? null,
+        ipAddress: event.ip ?? null,
+        success: event.success,
+        detail: event.detail ? event.detail.slice(0, 500) : null
+      }
+    });
+  } catch (error) {
+    console.error("[SecurityEvent] 审计写入失败:", error);
+  }
+}
+
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "AI数字农业管家 API", time: now() });
 });
@@ -168,12 +193,26 @@ app.post("/api/auth/login", async (req, res) => {
   const attemptKey = `${req.ip}:${parsed.data.identifier.toLowerCase()}`;
   const attempt = loginAttempts.get(attemptKey);
   if (attempt && attempt.blockedUntil > Date.now()) {
+    void logSecurityEvent({
+      eventType: "login_blocked",
+      identifier: parsed.data.identifier,
+      ip: req.ip,
+      success: false,
+      detail: "登录失败次数过多，15分钟锁定"
+    });
     res.status(429).json({ message: "登录失败次数过多，请15分钟后再试。" });
     return;
   }
   try {
     const result = await authService.login(parsed.data.identifier, parsed.data.password);
     loginAttempts.delete(attemptKey);
+    void logSecurityEvent({
+      eventType: "login",
+      identifier: parsed.data.identifier,
+      userId: result.user.id,
+      ip: req.ip,
+      success: true
+    });
     res.json(result);
   } catch (error) {
     if (error instanceof AuthenticationError) {
@@ -181,6 +220,13 @@ app.post("/api/auth/login", async (req, res) => {
       loginAttempts.set(attemptKey, {
         failures,
         blockedUntil: failures >= 5 ? Date.now() + 15 * 60 * 1000 : 0
+      });
+      void logSecurityEvent({
+        eventType: "login_failure",
+        identifier: parsed.data.identifier,
+        ip: req.ip,
+        success: false,
+        detail: error.message
       });
     }
     res.status(error instanceof AuthenticationError ? 401 : 500).json({
@@ -205,8 +251,24 @@ app.post("/api/auth/register", async (req, res) => {
 
   try {
     const result = await authService.register(parsed.data);
+    void logSecurityEvent({
+      eventType: "register",
+      identifier: parsed.data.identifier,
+      userId: result.user.id,
+      ip: req.ip,
+      success: true
+    });
     res.status(201).json(result);
   } catch (error) {
+    if (error instanceof AuthenticationError) {
+      void logSecurityEvent({
+        eventType: "register_failure",
+        identifier: parsed.data.identifier,
+        ip: req.ip,
+        success: false,
+        detail: error.message
+      });
+    }
     res.status(error instanceof AuthenticationError ? 400 : 500).json({
       message: error instanceof Error ? error.message : "注册失败。"
     });
@@ -232,8 +294,25 @@ app.post("/api/auth/change-password", async (req, res) => {
   }
   try {
     await authService.changePassword(req.auth!.id, parsed.data.currentPassword, parsed.data.newPassword);
+    const identity = req.auth!.email ?? req.auth!.phone ?? req.auth!.id;
+    void logSecurityEvent({
+      eventType: "password_change",
+      identifier: identity,
+      userId: req.auth!.id,
+      ip: req.ip,
+      success: true
+    });
     res.json({ success: true, message: "密码已更新，请使用新密码登录。" });
   } catch (error) {
+    const identity = req.auth!.email ?? req.auth!.phone ?? req.auth!.id;
+    void logSecurityEvent({
+      eventType: "password_change_failure",
+      identifier: identity,
+      userId: req.auth!.id,
+      ip: req.ip,
+      success: false,
+      detail: error instanceof Error ? error.message : undefined
+    });
     res.status(error instanceof AuthenticationError ? 400 : 500).json({
       message: error instanceof Error ? error.message : "密码修改失败。"
     });
@@ -442,6 +521,26 @@ app.get("/api/knowledge/retrieval-logs", requireAdmin, async (req, res) => {
   const limit = Number(req.query.limit ?? 20);
   // limit 钳制在 1~500，防止一次拉取全量日志
   res.json(await retrievalService.listLogs(Number.isFinite(limit) ? Math.min(500, Math.max(1, Math.floor(limit))) : 20));
+});
+
+// 安全事件审计查询：仅管理员；支持按事件类型过滤；limit 钳制 1~500；顺带清理 90 天前过期事件
+app.get("/api/security-events", requireAdmin, async (req, res) => {
+  try {
+    await prisma.securityEvent.deleteMany({
+      where: { createdAt: { lt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } }
+    });
+    const rawLimit = Number(req.query.limit ?? 100);
+    const limit = Number.isFinite(rawLimit) ? Math.min(500, Math.max(1, Math.floor(rawLimit))) : 100;
+    const type = typeof req.query.type === "string" && req.query.type ? req.query.type : undefined;
+    const events = await prisma.securityEvent.findMany({
+      where: type ? { eventType: type } : {},
+      orderBy: { createdAt: "desc" },
+      take: limit
+    });
+    res.json({ total: events.length, items: events });
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : "安全事件读取失败。" });
+  }
 });
 
 app.get("/api/agent/tools", (_req, res) => {
