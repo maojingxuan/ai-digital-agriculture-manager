@@ -302,7 +302,39 @@ npm run build       # 全仓构建
 
 ---
 
-## 十二、常见问题
+## 十二、安全部署
+
+**认证与访问控制**
+
+- 全部 `/api` 业务接口默认要求登录（`Authorization: Bearer <token>`），登录凭证为 HMAC-SHA256 签名 token，8 小时过期；修改密码后旧凭证立即失效。
+- 数据按用户隔离：诊断、巡田、产品等业务数据仅本人可见；管理员（`role=admin`）可查看全量并执行管理操作（删除地块/知识库、查看检索日志等）。管理员注册必须使用 `.env` 中显式配置的 `ADMIN_INVITE_CODE`，未配置时禁止注册管理员。
+
+**媒体资源签名（自动生效）**
+
+- `uploads` 目录不再匿名公开：诊断图片/视频、巡田图片等静态资源需要短期签名 URL（默认 15 分钟有效）。
+- 后端在返回诊断/巡田/产品数据时自动为 `imageUrl`、`annotatedImageUrl`、`videoUrl`、视频关键帧签发签名；前端按原方式渲染即可，无需改动。直接访问无签名或伪造/过期的媒体链接将返回 403。
+
+**传输层（HTTPS）**
+
+本地开发默认 HTTP。生产部署必须启用 TLS，两种方式任选其一：
+
+1. 启用内置 HTTPS：在 `apps/api/.env` 配置
+   ```
+   HTTPS_ENABLED=true
+   TLS_CERT_PATH=/etc/ssl/xxx.pem     # 证书（PEM）
+   TLS_KEY_PATH=/etc/ssl/xxx.key      # 私钥（PEM）
+   ```
+   证书/私钥缺失时服务将拒绝启动（不会静默降级为 HTTP）。
+2. 推荐：使用 Nginx / Caddy 反向代理终止 TLS，将请求转发到本服务（`http://127.0.0.1:3001`），并把来源域名加入 `CORS_ALLOWED_ORIGINS`。
+
+**密钥与敏感配置**
+
+- `AUTH_SECRET` 必须为 32 位以上强随机值（`npm run auth:init` 可生成）；`LLM_API_KEY`、`ADMIN_INVITE_CODE` 等均只存在于 `.env`，已被 `.gitignore` 忽略，禁止提交到仓库。
+- 数据库密码使用 `scrypt` 加盐哈希存储（`scrypt$salt$hash`），任何情况下不保存明文密码或登录 token。
+
+---
+
+## 十三、常见问题
 
 **Q：为什么网页能启动但图片问诊提示未配置 Python？**
 

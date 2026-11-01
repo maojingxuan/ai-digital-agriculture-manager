@@ -8,6 +8,7 @@ import type {
 } from "@prisma/client";
 import type { DiagnosisRecord, GreenhouseSummary, PatrolReport, Product, RiskLevel, VideoDiagnosisRecord, VideoKeyFrame, YoloDetection } from "@agri/shared";
 import { getComprehensiveStatus } from "./sensorSimulator.js";
+import { signMediaUrl } from "./mediaAuth.js";
 
 export interface CreateProductInput {
   name: string;
@@ -60,7 +61,11 @@ const toKeyFrames = (value: Prisma.JsonValue | null): VideoKeyFrame[] | undefine
   if (!Array.isArray(value)) {
     return undefined;
   }
-  return value as unknown as VideoKeyFrame[];
+  // 帧图 URL 同样签发短期签名
+  return (value as unknown as VideoKeyFrame[]).map((frame) => ({
+    ...frame,
+    imageUrl: signMediaUrl(frame.imageUrl)
+  }));
 };
 
 const mapDiagnosis = (
@@ -69,8 +74,8 @@ const mapDiagnosis = (
   id: record.id,
   cropType: record.cropType,
   symptomDescription: optionalText(record.symptomDescription),
-  imageUrl: optionalText(record.imageUrl),
-  annotatedImageUrl: optionalText(record.annotatedImageUrl),
+  imageUrl: signMediaUrl(record.imageUrl),
+  annotatedImageUrl: signMediaUrl(record.annotatedImageUrl),
   suspectedDisease: record.suspectedDisease,
   confidence: record.confidence,
   riskLevel: toRiskLevel(record.riskLevel),
@@ -81,7 +86,7 @@ const mapDiagnosis = (
   ragReferences: toStringArray(record.ragReferences),
   visionError: optionalText(record.visionError),
   sourceType: record.sourceType === "video" ? "video" : undefined,
-  videoUrl: optionalText(record.videoUrl),
+  videoUrl: signMediaUrl(record.videoUrl),
   framesAnalyzed: record.framesAnalyzed ?? undefined,
   frameCount: record.frameCount ?? undefined,
   keyFrames: toKeyFrames(record.keyFrames),
@@ -92,7 +97,7 @@ const mapPatrol = (record: PatrolRecord): PatrolReport => ({
   id: record.id,
   plotName: record.plotName,
   cropName: record.cropName,
-  imageUrl: optionalText(record.imageUrl),
+  imageUrl: signMediaUrl(record.imageUrl),
   growthStatus: record.growthStatus,
   anomalies: toStringArray(record.anomalies) ?? [],
   environmentRisk: record.environmentRisk,
@@ -105,7 +110,7 @@ const mapProduct = (record: ProductWithTraces): Product => ({
   id: record.id,
   name: record.name,
   category: record.category,
-  imageUrl: optionalText(record.imageUrl),
+  imageUrl: signMediaUrl(record.imageUrl),
   origin: record.origin,
   harvestTime: record.harvestTime?.toISOString(),
   cultivationMethod: optionalText(record.cultivationMethod),

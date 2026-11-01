@@ -1,6 +1,7 @@
 import "./config/env.js";
 import cors from "cors";
 import fs from "node:fs";
+import https from "node:https";
 import path from "node:path";
 import express from "express";
 import multer from "multer";
@@ -25,6 +26,7 @@ import { resolveApiPath } from "./config/paths.js";
 import { PersistenceService } from "./services/persistenceService.js";
 import { AuthenticationError, AuthService, verifyPassword } from "./services/authService.js";
 import { createAuthenticate, requireAdmin } from "./middleware/auth.js";
+import { verifyMediaRequest } from "./services/mediaAuth.js";
 import { DeviceControlService } from "./services/deviceControlService.js";
 import { PatrolDemoService } from "./services/patrolDemoService.js";
 import { registerPatrolDemoRoutes } from "./routes/patrolDemoRoutes.js";
@@ -73,8 +75,17 @@ app.use(
   })
 );
 app.use(express.json());
-app.use("/uploads", express.static(uploadDir));
-app.use("/api/uploads", express.static(uploadDir));
+// uploads 静态托管需要媒体签名（见 services/mediaAuth.ts），防止诊断图片/视频匿名访问
+const mediaGate = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const file = (req.path ?? "").replace(/^\/+/, "");
+  if (!verifyMediaRequest(file, String(req.query.sig ?? ""), String(req.query.exp ?? ""))) {
+    res.status(403).json({ message: "媒体链接无效或已过期，请刷新页面后重试。" });
+    return;
+  }
+  next();
+};
+app.use("/uploads", mediaGate, express.static(uploadDir));
+app.use("/api/uploads", mediaGate, express.static(uploadDir));
 
 const now = () => new Date().toISOString();
 const id = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
@@ -595,6 +606,22 @@ app.post("/api/tts", async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`AI数字农业管家 API running at http://localhost:${port}`);
-});
+// 传输层：默认 HTTP（本地开发）；设置 HTTPS_ENABLED=true 并配置 TLS_CERT_PATH/TLS_KEY_PATH 启用 HTTPS
+const httpsEnabled = process.env.HTTPS_ENABLED?.trim().toLowerCase() === "true";
+if (httpsEnabled) {
+  const certPath = process.env.TLS_CERT_PATH?.trim();
+  const keyPath = process.env.TLS_KEY_PATH?.trim();
+  if (!certPath || !keyPath || !fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
+    console.error("[TLS] HTTPS_ENABLED=true 但 TLS_CERT_PATH/TLS_KEY_PATH 缺失或文件不存在。生产环境请配置真实证书（或用 Nginx/Caddy 反向代理终止 TLS）。");
+    process.exit(1);
+  }
+  https
+    .createServer({ cert: fs.readFileSync(certPath), key: fs.readFileSync(keyPath) }, app)
+    .listen(port, () => {
+      console.log(`AI数字农业管家 API running at https://localhost:${port}`);
+    });
+} else {
+  app.listen(port, () => {
+    console.log(`AI数字农业管家 API running at http://localhost:${port}`);
+  });
+}
