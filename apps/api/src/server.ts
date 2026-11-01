@@ -40,7 +40,69 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-const upload = multer({ dest: uploadDir });
+// ---- 上传安全限制（防资源耗尽）：按接口限制文件大小与类型 ----
+type UploadPolicy = {
+  maxSize: number;
+  allowedMime: string[];
+  allowedExt: string[];
+  allowUnknownMime: boolean;
+};
+
+const IMAGE_UPLOAD_POLICY: UploadPolicy = {
+  maxSize: 10 * 1024 * 1024, // 10MB
+  allowedMime: ["image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"],
+  allowedExt: [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"],
+  allowUnknownMime: false
+};
+const VIDEO_UPLOAD_POLICY: UploadPolicy = {
+  maxSize: 50 * 1024 * 1024, // 50MB
+  allowedMime: ["video/mp4", "video/webm", "video/quicktime", "video/x-msvideo", "video/mpeg"],
+  allowedExt: [".mp4", ".webm", ".mov", ".avi", ".mpeg", ".mpg"],
+  allowUnknownMime: false
+};
+const DOC_UPLOAD_POLICY: UploadPolicy = {
+  maxSize: 10 * 1024 * 1024, // 10MB
+  allowedMime: ["text/plain", "text/markdown", "text/csv"],
+  allowedExt: [".txt", ".md", ".markdown", ".csv"],
+  allowUnknownMime: true // 文本类常被客户端标为 application/octet-stream 或空，按扩展名兜底
+};
+
+function makeUploader(policy: UploadPolicy) {
+  return multer({
+    dest: uploadDir,
+    limits: { fileSize: policy.maxSize, files: 1 },
+    fileFilter: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const mime = (file.mimetype ?? "").toLowerCase();
+      const extOk = policy.allowedExt.includes(ext);
+      if (!extOk) {
+        cb(new Error(`不支持的文件类型：${file.originalname || "未知文件"}（仅允许 ${policy.allowedExt.join(" / ")} 文件）`));
+        return;
+      }
+      if (policy.allowedMime.includes(mime) || mime === "" || policy.allowUnknownMime) {
+        cb(null, true);
+        return;
+      }
+      cb(new Error(`文件内容与扩展名不匹配：${file.originalname || "未知文件"}`));
+    }
+  });
+}
+
+function uploadErrorHandler(err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) {
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      res.status(413).json({ message: "文件超过大小限制，请压缩后重试。" });
+      return;
+    }
+    res.status(400).json({ message: `上传失败：${err.code}` });
+    return;
+  }
+  res.status(400).json({ message: err instanceof Error ? err.message : "上传失败。" });
+}
+
+const uploadImage = makeUploader(IMAGE_UPLOAD_POLICY);
+const uploadVideo = makeUploader(VIDEO_UPLOAD_POLICY);
+const uploadDoc = makeUploader(DOC_UPLOAD_POLICY);
 const knowledgeService = new KnowledgeService(prisma);
 const retrievalService = new RetrievalService(prisma, undefined, llmService);
 const yoloDiagnosisService = new YoloDiagnosisService(retrievalService, llmService);
@@ -331,7 +393,7 @@ app.post("/api/knowledge/documents", requireAdmin, async (req, res) => {
   }
 });
 
-app.post("/api/knowledge/upload", requireAdmin, upload.single("file"), async (req, res) => {
+app.post("/api/knowledge/upload", requireAdmin, uploadDoc.single("file"), async (req: express.Request, res: express.Response) => {
   if (!req.file) {
     res.status(400).json({ message: "请上传知识文档。" });
     return;
@@ -346,7 +408,7 @@ app.post("/api/knowledge/upload", requireAdmin, upload.single("file"), async (re
   } catch (error) {
     res.status(400).json({ message: error instanceof Error ? error.message : "文档解析失败。" });
   }
-});
+}, uploadErrorHandler);
 
 app.get("/api/knowledge/search", async (req, res) => {
   const query = String(req.query.query ?? "");
@@ -456,7 +518,7 @@ app.post("/api/devices/:id/commands", requireAdmin, async (req, res) => {
   }
 });
 
-app.post("/api/diagnosis", upload.single("image"), async (req, res) => {
+app.post("/api/diagnosis", uploadImage.single("image"), async (req: express.Request, res: express.Response) => {
   const cropType = String(req.body.cropType ?? "未知作物");
   const symptomDescription = req.body.symptomDescription ? String(req.body.symptomDescription) : undefined;
 
@@ -474,13 +536,13 @@ app.post("/api/diagnosis", upload.single("image"), async (req, res) => {
       message: error instanceof Error ? error.message : "农业问诊诊断失败，请检查模型与服务状态。"
     });
   }
-});
+}, uploadErrorHandler);
 
 app.get("/api/diagnosis", async (req, res) => {
   res.json(await persistenceService.listDiagnoses(req.auth!.id, req.auth!.role === "admin"));
 });
 
-app.post("/api/diagnosis/video", upload.single("video"), async (req, res) => {
+app.post("/api/diagnosis/video", uploadVideo.single("video"), async (req: express.Request, res: express.Response) => {
   const cropType = String(req.body.cropType ?? "未知作物");
   const symptomDescription = req.body.symptomDescription ? String(req.body.symptomDescription) : undefined;
 
@@ -509,9 +571,9 @@ app.post("/api/diagnosis/video", upload.single("video"), async (req, res) => {
       message: error instanceof Error ? error.message : "视频诊断失败，请检查模型与服务状态。"
     });
   }
-});
+}, uploadErrorHandler);
 
-app.post("/api/patrols", upload.single("image"), async (req, res) => {
+app.post("/api/patrols", uploadImage.single("image"), async (req: express.Request, res: express.Response) => {
   try {
     const report = await persistenceService.createPatrol({
       id: id("patrol"),
@@ -529,7 +591,7 @@ app.post("/api/patrols", upload.single("image"), async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : "巡田报告保存失败。" });
   }
-});
+}, uploadErrorHandler);
 
 app.get("/api/patrols", async (req, res) => {
   try {
