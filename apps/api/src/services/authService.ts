@@ -97,9 +97,10 @@ export class AuthService {
 
     const targetRole = data.role === "admin" ? "admin" : "user";
     if (targetRole === "admin") {
-      const expectedCode = process.env.ADMIN_INVITE_CODE?.trim() || "admin888";
-      if (!data.adminCode || data.adminCode.trim() !== expectedCode) {
-        throw new AuthenticationError("管理员邀请码错误，无法注册为管理员。");
+      // 管理员邀请码必须显式配置；未配置时禁止注册管理员，杜绝硬编码默认值
+      const expectedCode = process.env.ADMIN_INVITE_CODE?.trim() ?? "";
+      if (!expectedCode || !data.adminCode || data.adminCode.trim() !== expectedCode) {
+        throw new AuthenticationError("管理员邀请码未配置或错误，无法注册为管理员。");
       }
     }
 

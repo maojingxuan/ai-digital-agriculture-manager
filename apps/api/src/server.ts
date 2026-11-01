@@ -365,9 +365,10 @@ app.post("/api/knowledge/answer", async (req, res) => {
   res.json(await retrievalService.answer(parsed.data.query, parsed.data));
 });
 
-app.get("/api/knowledge/retrieval-logs", async (req, res) => {
+app.get("/api/knowledge/retrieval-logs", requireAdmin, async (req, res) => {
   const limit = Number(req.query.limit ?? 20);
-  res.json(await retrievalService.listLogs(Number.isFinite(limit) ? limit : 20));
+  // limit 钳制在 1~500，防止一次拉取全量日志
+  res.json(await retrievalService.listLogs(Number.isFinite(limit) ? Math.min(500, Math.max(1, Math.floor(limit))) : 20));
 });
 
 app.get("/api/agent/tools", (_req, res) => {
