@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" role="img" aria-labelledby="title desc">
+<title id="title">叶面黄斑演示示意图</title><desc id="desc">人工绘制的绿色叶片与黄色斑点。预设演示结果，不代表真实病害。</desc>
+<defs><linearGradient id="leaf" x2="1" y2="1"><stop stop-color="#4d9c61"/><stop offset="1" stop-color="#236747"/></linearGradient></defs>
+<rect width="640" height="400" rx="24" fill="#f6f1e5"/>
+<path d="M323 330 Q160 300 158 192 L185 183 177 151 213 155 218 117 257 130 280 91 310 112 332 74 Q445 143 472 225 L441 233 444 266 407 263 396 293 362 289Z" fill="url(#leaf)"/>
+<path d="M320 352 324 145 M324 210 226 160 M324 247 205 225 M325 288 251 279 M324 213 403 145 M324 251 426 216 M324 287 383 267" fill="none" stroke="#a4d99a" stroke-width="5" stroke-linecap="round"/>
+<g fill="#dbc366" opacity=".92"><ellipse cx="266" cy="182" rx="24" ry="16"/><ellipse cx="375" cy="201" rx="29" ry="19"/><ellipse cx="264" cy="250" rx="20" ry="15"/><ellipse cx="363" cy="278" rx="18" ry="12"/></g>
+<g fill="none" stroke="#ad6738" stroke-width="2" stroke-dasharray="5 5"><circle cx="266" cy="182" r="34"/><circle cx="375" cy="201" r="37"/></g>
+<text x="28" y="42" font-family="sans-serif" font-size="18" fill="#775335">黄斑演示示意 · 非模型识别结果</text>
+<text x="28" y="378" font-family="sans-serif" font-size="15" fill="#7d7056">来源：本项目 SVG v1 / 非实拍 / 非训练数据</text></svg>

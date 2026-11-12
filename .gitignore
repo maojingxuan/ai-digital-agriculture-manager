@@ -1,0 +1,45 @@
+node_modules/
+.venv/
+dist/
+build/
+.vite/
+.turbo/
+.env
+.env.*
+!.env.example
+uploads/
+.ultralytics/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.local
+*.log
+apps/api/models/
+apps/api/data/llm-provider.json
+
+# Downloaded AI models and local datasets/training artifacts
+/图片数据/
+/yolo训练结果/
+
+# One-off local benchmarks and integration probes
+apps/api/bench_tts.mjs
+apps/api/test_*.mjs
+
+# Generated document review/design workspaces
+/_doc_task/
+/_format_qa/
+/_review/
+/.creative-design/
+/docx_review_render/
+/docx_review_structure.json
+/inspect_docx_review.py
+/tools/
+/scripts/render-project-architecture.ps1
+/scripts/render-usecase-er-diagrams.ps1
