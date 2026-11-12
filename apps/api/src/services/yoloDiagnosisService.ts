@@ -110,7 +110,7 @@ export class YoloDiagnosisService {
     this.modelPath = process.env.YOLO_MODEL_PATH?.trim()
       ? resolveApiPath(
           process.env.YOLO_MODEL_PATH,
-          "models/crop_disease_yolo11.pt",
+          "models/corn_disease_best.pt",
         )
       : yoloModelPath;
     this.scriptPath = process.env.YOLO_SCRIPT_PATH?.trim()

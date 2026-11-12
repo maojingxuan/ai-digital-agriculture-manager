@@ -17,7 +17,7 @@ import struct
 import array
 import sherpa_onnx
 
-MODEL_DIR = r"D:\新数字人系统\apps\api\models\asr-sense-voice"
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models", "asr-sense-voice")
 
 # sense-voice 要求的输入采样率
 TARGET_SAMPLE_RATE = 16000

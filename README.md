@@ -78,7 +78,7 @@
 | 设备控制 | 数据库仿真 | 修改数据库中的设备运行状态并记录命令，不控制真实风机、水泵或补光灯 |
 | 天气与销售数据 Tool | 模拟 | Agent 返回演示数据，并非实时气象或真实订单数据 |
 | 产品“AI 文案” | 可选真实调用 | 使用当前选中的 Ollama 或 DeepSeek 生成，校验后保存；模型不可用时提示错误，不保存模板文案 |
-| 语音输入 | 浏览器能力 | 依赖 Chrome/Edge Web Speech API、浏览器权限和网络/系统支持 |
+| 语音输入 | 本地模型 | 优先调用后端 sherpa-onnx SenseVoice；需允许浏览器麦克风权限 |
 | 回答播报 | 本地优先、浏览器回退 | 优先请求后端 sherpa-onnx WAV，失败后使用浏览器 `speechSynthesis` |
 
 > 问诊页虽然提供“沃柑、甘蔗、玉米”选项，但仓库当前附带的是玉米模型。非玉米图片的模型结论不具备可靠性。
@@ -97,7 +97,7 @@
 | 共享层 | 独立 Workspace `@agri/shared`，维护前后端类型和巡田协议 |
 | 视觉识别 | Python、Ultralytics YOLO、OpenCV、Pillow |
 | 大模型 | OpenAI Chat Completions 兼容接口 |
-| 语音 | Web Speech API；可选 sherpa-onnx + VITS 中文模型 |
+| 语音 | sherpa-onnx SenseVoice ASR 与 VITS TTS；浏览器 TTS 回退 |
 | 数字人 | React 驱动的透明 PNG 帧动画 |
 
 ### 3.2 请求链路
@@ -137,7 +137,7 @@ Express API ── Prisma ── SQLite
 │  │  │  └─ server.ts             服务入口与主要 API
 │  │  ├─ prisma/                  Schema、迁移、种子与测试
 │  │  ├─ scripts/                 YOLO/TTS Python 脚本
-│  │  ├─ models/                  本地模型资产
+│  │  ├─ models/                  YOLO 权重随仓库提供；语音模型由 setup:voice 下载
 │  │  └─ uploads/                 运行时上传文件（Git 忽略）
 │  └─ web/                         React 前端
 │     ├─ public/
@@ -213,6 +213,8 @@ npm run doctor
 ```
 
 检查项包括 Node/npm 版本、Workspace 链接、Prisma Schema、签名密钥、上传目录、端口和 Python/YOLO 环境。
+
+需要图片识别时运行 `npm run setup:yolo`；需要离线语音识别和播报时，在 `.env` 配置 Python 后运行 `npm run setup:voice`。语音模型会从上游发行版自动下载。
 
 ### 6.3 启动
 
@@ -304,7 +306,7 @@ VITE_API_BASE_URL=http://localhost:3001/api
 
 ### 8.1 YOLO 图片/视频识别
 
-仓库当前实际存在的模型文件是：
+仓库提供的模型文件是：
 
 ```text
 apps/api/models/corn_disease_best.pt
@@ -316,7 +318,7 @@ apps/api/models/corn_disease_best.pt
 YOLO_MODEL_PATH=models/corn_disease_best.pt
 ```
 
-> 当前代码默认回退名和 `doctor` 检查名仍是 `crop_disease_yolo11.pt`，而该文件不在当前仓库。若未显式设置上述变量，问诊推理会提示找不到模型；`doctor` 也可能继续报告旧默认文件缺失。这不影响 Node.js 基础模块启动。
+默认模型路径与 `doctor` 检查均指向该文件。新电脑还需执行 `npm run setup:yolo` 安装 Python 推理依赖。
 
 指定 Python 的两种方式：
 
@@ -359,11 +361,21 @@ ollama pull qwen2.5:7b
 
 旧版 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL` 仍可用作兼容回退。DeepSeek 请求超时为 20 秒，Ollama 为 120 秒（便于 CPU 推理）。所选模型不可用时，知识问答和诊断仍会回退到本地规则与检索结果。
 
-### 8.3 后端离线 TTS
+### 8.3 后端离线语音识别与合成
 
-当前 TTS 使用常驻 Python 子进程加载 sherpa-onnx VITS 模型，请准备：
+当前 ASR 和 TTS 使用常驻 Python 子进程加载 sherpa-onnx 模型。首次克隆后，在根目录 `.env` 配置 `PYTHON_EXEC` 或 `PYTHON_ENV_PATH`，再运行：
+
+```bash
+npm run setup:voice
+```
+
+脚本安装 `sherpa-onnx`，从 [sherpa-onnx 官方发行版](https://github.com/k2-fsa/sherpa-onnx/releases)下载 ASR 与 TTS 模型，并校验权重的 SHA-256。语音模型共约 360 MB，超过 GitHub 的单文件限制，因此通过官方发行版获取。下载完成后目录为：
 
 ```text
+apps/api/models/asr-sense-voice/
+├─ model.int8.onnx
+└─ tokens.txt
+
 apps/api/models/tts-zh-ll/sherpa-onnx-vits-zh-ll/
 ├─ model.onnx
 ├─ tokens.txt
@@ -371,15 +383,7 @@ apps/api/models/tts-zh-ll/sherpa-onnx-vits-zh-ll/
 └─ dict/...
 ```
 
-安装依赖：
-
-```bash
-"C:\Path\To\python.exe" -m pip install sherpa-onnx
-```
-
-务必设置 `PYTHON_EXEC` 为可运行 sherpa-onnx 的解释器。当前 TTS 服务不读取 `PYTHON_ENV_PATH`，且源码中存在一个开发机绝对路径兜底；其他电脑不能依赖该兜底。
-
-TTS 模型目录在 `.gitignore` 中，若复制源码到新电脑，需要单独携带或重新下载模型。服务启动后会后台预热；合成失败时前端自动尝试浏览器语音。
+运行 `npm run doctor` 检查模型文件。服务启动后会后台预热；合成失败时前端自动尝试浏览器语音。
 
 ---
 
@@ -716,11 +720,11 @@ PYTHON_EXEC=C:\Path\To\python.exe
 YOLO_MODEL_PATH=models/corn_disease_best.pt
 ```
 
-然后运行 `npm run setup:yolo` 并重启后端。当前仓库没有代码默认名 `crop_disease_yolo11.pt`。
+然后运行 `npm run setup:yolo` 并重启后端。YOLO 权重已随仓库提供。
 
-### `npm run doctor` 仍提示 YOLO 模型缺失
+### 下载后语音识别提示模型未就绪
 
-当前检查脚本写死检查旧默认文件 `apps/api/models/crop_disease_yolo11.pt`。只要 `.env` 的 `YOLO_MODEL_PATH` 指向实际存在的 `corn_disease_best.pt`，运行时可以使用该模型；该提示属于检查脚本与现有资产命名不同步。
+在 `.env` 配置可用的 `PYTHON_EXEC` 或 `PYTHON_ENV_PATH`，执行 `npm run setup:voice`，再重启后端。检查 `npm run doctor` 是否找到 ASR 模型及 TTS 模型。
 
 ### 小墨没有声音
 

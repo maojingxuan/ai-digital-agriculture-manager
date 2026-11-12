@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
-import { projectRootDir } from "../config/paths.js";
+import { projectRootDir, voicePythonExecutable } from "../config/paths.js";
 
 interface PendingReq {
   resolve: (wav: Buffer) => void;
@@ -30,9 +30,7 @@ export class SherpaTtsService {
   private warmingUp = false;
 
   constructor() {
-    this.pythonExec =
-      process.env.PYTHON_EXEC?.trim() ||
-      "E:\\Conda\\miniconda3\\envs\\work\\python.exe";
+    this.pythonExec = voicePythonExecutable();
     this.scriptPath = path.join(
       projectRootDir,
       "apps",

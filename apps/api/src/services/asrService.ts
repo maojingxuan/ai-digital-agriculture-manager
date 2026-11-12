@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { projectRootDir } from "../config/paths.js";
+import { projectRootDir, voicePythonExecutable } from "../config/paths.js";
 
 interface QueueItem {
   wav: Buffer;
@@ -40,9 +40,7 @@ export class SherpaAsrService {
   private lastError = "";
 
   constructor() {
-    this.pythonExec =
-      process.env.PYTHON_EXEC?.trim() ||
-      "E:\\Conda\\miniconda3\\envs\\work\\python.exe";
+    this.pythonExec = voicePythonExecutable();
     this.scriptPath = path.join(
       projectRootDir,
       "apps",

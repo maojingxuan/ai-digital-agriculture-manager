@@ -21,7 +21,8 @@ yarn-error.log*
 pnpm-debug.log*
 *.local
 *.log
-apps/api/models/
+apps/api/models/*
+!apps/api/models/corn_disease_best.pt
 apps/api/data/llm-provider.json
 
 # Downloaded AI models and local datasets/training artifacts

@@ -75,11 +75,26 @@ const requiredFiles = [
   ["共享类型产物", "packages/shared/dist/index.js"],
   ["Prisma Schema", "apps/api/prisma/schema.prisma"],
   ["YOLO 推理脚本", "apps/api/scripts/yolo_inference.py"],
-  ["YOLO 模型", "apps/api/models/crop_disease_yolo11.pt"]
+  ["YOLO 模型", "apps/api/models/corn_disease_best.pt"]
 ];
 for (const [name, relativePath] of requiredFiles) {
   report(fs.existsSync(path.join(projectRoot, relativePath)) ? "ok" : "error", name, relativePath);
 }
+
+const asrDir = path.join(projectRoot, "apps", "api", "models", "asr-sense-voice");
+const ttsDir = path.join(projectRoot, "apps", "api", "models", "tts-zh-ll", "sherpa-onnx-vits-zh-ll");
+const asrReady = fs.existsSync(path.join(asrDir, "model.int8.onnx")) && fs.existsSync(path.join(asrDir, "tokens.txt"));
+report(
+  asrReady ? "ok" : "warn",
+  "语音识别模型",
+  asrReady ? "文件齐全" : "缺失时运行 npm run setup:voice",
+);
+const ttsReady = ["model.onnx", "tokens.txt", "lexicon.txt", "dict"].every((name) => fs.existsSync(path.join(ttsDir, name)));
+report(
+  ttsReady ? "ok" : "warn",
+  "语音合成模型",
+  ttsReady ? "文件齐全" : "缺失时运行 npm run setup:voice",
+);
 
 report(fs.existsSync(path.join(projectRoot, ".env")) ? "ok" : "warn", ".env", fs.existsSync(path.join(projectRoot, ".env")) ? "已配置" : "缺失，运行 npm run setup 可自动创建");
 const authSecret = readEnvValue("AUTH_SECRET");

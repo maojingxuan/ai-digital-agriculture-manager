@@ -10,6 +10,8 @@
   "scripts": {
     "setup": "node scripts/setup.mjs",
     "setup:yolo": "node scripts/setup-yolo.mjs",
+    "setup:models": "node scripts/setup-models.mjs",
+    "setup:voice": "node scripts/setup-voice.mjs",
     "auth:init": "node scripts/init-auth.mjs",
     "doctor": "node scripts/doctor.mjs",
     "dev": "npm run build -w packages/shared && concurrently -n api,web -c cyan,green \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",

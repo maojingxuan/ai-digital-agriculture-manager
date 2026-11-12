@@ -6,17 +6,18 @@ import sys
 import wave
 import struct
 import io
+import os
 import sherpa_onnx
 
-MODEL_DIR = r"D:\新数字人系统\apps\api\models\tts-zh-ll\sherpa-onnx-vits-zh-ll"
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models", "tts-zh-ll", "sherpa-onnx-vits-zh-ll")
 
 def main():
     tts_config = sherpa_onnx.OfflineTtsConfig(
         model=sherpa_onnx.OfflineTtsModelConfig(
             vits=sherpa_onnx.OfflineTtsVitsModelConfig(
-                model=f"{MODEL_DIR}\\model.onnx",
-                tokens=f"{MODEL_DIR}\\tokens.txt",
-                lexicon=f"{MODEL_DIR}\\lexicon.txt",
+                model=os.path.join(MODEL_DIR, "model.onnx"),
+                tokens=os.path.join(MODEL_DIR, "tokens.txt"),
+                lexicon=os.path.join(MODEL_DIR, "lexicon.txt"),
                 dict_dir=MODEL_DIR,
             )
         ),

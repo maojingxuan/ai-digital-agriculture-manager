@@ -41,5 +41,6 @@ run(["run", "db:seed"], "为空数据库写入基础演示数据");
 
 console.log("\n[setup] 基础环境初始化完成。");
 console.log("[setup] 如需图片识别，请再运行：npm run setup:yolo");
+console.log("[setup] 如需离线语音识别和播报，请在 .env 配置 Python 后运行：npm run setup:voice");
 console.log("[setup] 检查环境：npm run doctor");
 console.log("[setup] 启动项目：npm run dev");

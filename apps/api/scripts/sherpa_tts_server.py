@@ -20,7 +20,7 @@ import struct
 import io
 import sherpa_onnx
 
-MODEL_DIR = r"D:\新数字人系统\apps\api\models\tts-zh-ll\sherpa-onnx-vits-zh-ll"
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models", "tts-zh-ll", "sherpa-onnx-vits-zh-ll")
 
 # 常见英文缩写/单词转中文（长的写在前面，避免被短词截断替换）
 EN_MAP = {
